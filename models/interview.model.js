@@ -6,9 +6,7 @@ const interviewSchema = new mongoose.Schema({
     ref: "Application",
     required: true
   },
-  meetingLink: String,
   scheduleDate: Date,
-  message: String
 }, { timestamps: true });
 
 module.exports = mongoose.model("Interview", interviewSchema);
