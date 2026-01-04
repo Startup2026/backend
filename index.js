@@ -7,8 +7,8 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const path = require("path");
 const connectDB = require("./config/config");
-const userModel = require("./models/user");
-const routers=require("./router/router")
+const userModel = require("./models/user.model");
+const routers=require("./router/router.js")
 const cookieParser = require("cookie-parser");
 
 dotenv.config();
