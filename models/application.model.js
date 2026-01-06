@@ -15,6 +15,10 @@ const applicationSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  skills:{
+      type:String,
+      default:null
+  },
   status: {
     type: String,
     enum: [
