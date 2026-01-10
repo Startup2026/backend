@@ -8,7 +8,9 @@ const studentProfile=require("../user/studentProfile.Controller")
 const job = require("../controller/jobController/job.controller");
 const post = require("../controller/postController/post.controller");
 const mainSummary=require("../controller/mainSummaryController/mainSummary.controller")
-const jobPostSpecificSummary=require("../controller/jobPostSpecificSummary/jobPostSpecificSummary.controller");
+const jobPostSpecificSummary=require("../controller/graphicalJobAnalisis/graphicalJobAnalisis");
+const jobSummary = require("../controller/jobPostSpecificSummary/jobPostSpecificSummary");
+
 
 // 
 // middleware
@@ -68,14 +70,36 @@ router.get("/get-post/:id", token__middleware, post.getPostById);
 // delete post
 router.delete("/delete-post/:id", token__middleware, post.deletePost);
 
-// testing remained
-// mainSummary API
-router.get(("/get-main-summary",token__middleware,mainSummary.mainSummary))
+// testing remained// main summary API
+router.get("/get-main-summary", token__middleware, mainSummary.mainSummary);
 
+// testing remained
 // job post specific graphs
-router.get(("/get-job-post-day-wise-trend",token__middleware,jobPostSpecificSummary.summary))
-router.get(("/get-job-post-education",token__middleware,jobPostSpecificSummary.educationalDistribution))
-router.get(("/get-main-skills",token__middleware,jobPostSpecificSummary.skillsDistribution));
-// 
+router.get(
+  "/get-job-post-day-wise-trend",
+  token__middleware,
+  jobPostSpecificSummary.summary
+);
+
+router.get(
+  "/get-job-post-education",
+  token__middleware,
+  jobPostSpecificSummary.educationalDistribution
+);
+
+router.get(
+  "/get-main-skills",
+  token__middleware,
+  jobPostSpecificSummary.skillsDistribution
+);
+
+
+// job post specific summary
+router.get(
+  "/job-summary/:jobId",
+  token__middleware,
+  jobSummary.getJobPostSpecificSummary
+);
+
 
 module.exports=router;
