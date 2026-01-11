@@ -10,6 +10,7 @@ const post = require("../controller/postController/post.controller");
 const mainSummary=require("../controller/mainSummaryController/mainSummary.controller")
 const jobPostSpecificSummary=require("../controller/graphicalJobAnalisis/graphicalJobAnalisis");
 const jobSummary = require("../controller/jobPostSpecificSummary/jobPostSpecificSummary");
+const selectionsRoutes = require('./selections.routes');
 
 
 // 
@@ -101,5 +102,7 @@ router.get(
   jobSummary.getJobPostSpecificSummary
 );
 
+// Selections (send selection emails to multiple application IDs)
+router.use('/', selectionsRoutes);
 
 module.exports=router;

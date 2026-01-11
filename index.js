@@ -17,8 +17,17 @@ connectDB();
 const app = express();
 
 // Allow requests from your React frontend with credentials (cookies)
+const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:8080'];
 app.use(cors({
-  credentials: true   // allow cookies/tokens
+  origin: function (origin, callback) {
+    // Allow requests with no origin (curl, mobile apps, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+    return callback(new Error('CORS policy: origin not allowed'));
+  },
+  credentials: true, // allow cookies/tokens
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept']
 }));
 app.use(express.json());
 app.use(cookieParser());
