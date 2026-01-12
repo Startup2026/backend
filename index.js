@@ -8,8 +8,19 @@ const cors = require("cors");
 const path = require("path");
 const connectDB = require("./config/config");
 const userModel = require("./models/user.model");
-const routers=require("./router/router.js")
 const cookieParser = require("cookie-parser");
+const applicationRouter=require("./router/applications.routes.js");
+const startupProfileRouter=require("./router/startupProfile.routes.js");
+const studentProfileRouter=require("./router/studentProfile.routes.js");
+const userRouter=require("./router/users.routes.js");
+const graphicalRouter=require("./router/graphical.routes.js");
+const interviewsRouter=require("./router/interviews.routes.js");
+const jobsRouter=require("./router/jobs.routes.js");
+const jobSummaryRouter=require("./router/jobSummary.routes.js");
+const mainSummaryRouter=require("./router/mainSummary.routes.js");
+const myJobApplicationsRouter=require("./router/myJobApplications.routes.js");
+const postsRouter=require("./router/posts.routes.js");
+const selectionsRouter=require("./router/selections.routes.js");
 
 dotenv.config();
 connectDB();
@@ -40,8 +51,19 @@ app.use(cookieParser());
 
 app.use(express.urlencoded({ extended: true }));
 app.use("/media", express.static(path.join(__dirname, "media")));
-app.use("/api",routers);
-app.use("/api/auth",routers);
+// Mount all routers under /api so individual route paths defined in each router file map to `/api/<route>`
+app.use("/api", userRouter);
+app.use("/api", applicationRouter);
+app.use("/api", graphicalRouter);
+app.use("/api", interviewsRouter);
+app.use("/api", jobsRouter);
+app.use("/api", jobSummaryRouter);
+app.use("/api", mainSummaryRouter);
+app.use("/api", myJobApplicationsRouter);
+app.use("/api", postsRouter);
+app.use("/api", selectionsRouter);
+app.use("/api", startupProfileRouter);
+app.use("/api", studentProfileRouter);
 
 const isProduction = process.env.NODE_ENV === "production";
 
