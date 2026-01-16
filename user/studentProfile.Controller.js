@@ -15,7 +15,23 @@ const createProfile = async_handler(async (req, res) => {
     const userId = authUserId || bodyUserId;
     if (!userId) return res.status(400).json({ success: false, error: 'User ID required' });
 
-    const { firstName, lastName, email, education,skills,interests,githubUrl,linkedinUrl,portfolioUrl,resumeUrl } = req.body;
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      location,
+      bio,
+      profilepic,
+      education,
+      skills,
+      interests,
+      githubUrl,
+      linkedinUrl,
+      portfolioUrl,
+      resumeUrl,
+      experience
+    } = req.body;
 
     // Basic check: ensure user exists
     const user = await User.findById(userId);
@@ -24,7 +40,24 @@ const createProfile = async_handler(async (req, res) => {
     const existing = await StudentProfile.findOne({ userId });
     if (existing) return res.status(409).json({ success: false, error: 'Profile already exists for this user' });
 
-    const profile = new StudentProfile({ userId, firstName, lastName, email, education,skills,interests,githubUrl,linkedinUrl,portfolioUrl });
+    const profile = new StudentProfile({
+      userId,
+      firstName,
+      lastName,
+      email,
+      phone,
+      location,
+      bio,
+      profilepic,
+      education,
+      skills,
+      interests,
+      githubUrl,
+      linkedinUrl,
+      portfolioUrl,
+      resumeUrl,
+      experience
+    });
     await profile.save();
 
     user.profileCompleted = true;
@@ -75,7 +108,29 @@ const getProfileById = async_handler(async (req, res) => {
 
 const updateProfile = async_handler(async (req, res) => {
   try {
-    const updates = req.body;
+    // whitelist allowed fields
+    const allowed = [
+      'firstName',
+      'lastName',
+      'email',
+      'phone',
+      'location',
+      'bio',
+      'profilepic',
+      'education',
+      'skills',
+      'interests',
+      'githubUrl',
+      'linkedinUrl',
+      'portfolioUrl',
+      'resumeUrl',
+      'experience'
+    ];
+
+    const updates = {};
+    Object.keys(req.body || {}).forEach((k) => {
+      if (allowed.includes(k)) updates[k] = req.body[k];
+    });
 
     if (req.params.id === 'me') {
       const profile = await StudentProfile.findOneAndUpdate({ userId: req.user.id }, updates, { new: true, runValidators: true });

@@ -5,14 +5,23 @@ const bcrypt = require('bcryptjs');
 
 const createUser = async_handler(async (req, res) => {
   try {
-    const { name, email, role, password } = req.body;
-    if (!email || !password) return res.status(400).json({ success: false, error: 'Email and password are required' });
+    const { username, email, role, password } = req.body;
+    
+    // Validate required fields
+    if (!username || !email || !password || !role) {
+      return res.status(400).json({ success: false, error: 'username, email, password, and role are required' });
+    }
 
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(409).json({ success: false, error: 'Email already in use' });
 
+    // Ensure password is a string
+    if (typeof password !== 'string') {
+      return res.status(400).json({ success: false, error: 'Password must be a string' });
+    }
+
     const hashed = await bcrypt.hash(password, 10);
-    const user = new User({ name, email: email.toLowerCase(), role, password: hashed });
+    const user = new User({ username, email: email.toLowerCase(), role, password: hashed });
     await user.save();
 
     const userObj = user.toObject();

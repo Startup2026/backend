@@ -1,9 +1,9 @@
 const mongoose = require("mongoose");
 
 const post = new mongoose.Schema({
-    createdBy: {
+    startupid: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "StartupProfile",
         required: true,
     },
     media: {
@@ -44,6 +44,6 @@ const post = new mongoose.Schema({
         }
     ]
 
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model("post", post);

@@ -7,7 +7,22 @@ const async_handler = require("express-async-handler");
  */
 const createJob = async_handler(async (req, res) => {
   try {
-    const { startupId, title } = req.body;
+    const {
+      startupId,
+      role,
+      aboutRole,
+      keyResponsibilities,
+      requirements,
+      perksAndBenifits,
+      stipend,
+      salary,
+      openings,
+      deadline
+    } = req.body;
+
+    if (!startupId || !role || !aboutRole || !deadline) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
 
     // Ensure startup exists
     const startup = await StartupProfile.findById(startupId);
@@ -15,7 +30,19 @@ const createJob = async_handler(async (req, res) => {
       return res.status(404).json({ success: false, error: 'Startup not found' });
     }
 
-    const job = new Job(req.body);
+    const job = new Job({
+      startupId,
+      role,
+      aboutRole,
+      keyResponsibilities,
+      requirements,
+      perksAndBenifits,
+      stipend,
+      salary,
+      openings,
+      deadline
+    });
+
     await job.save();
 
     return res.status(201).json({
@@ -85,11 +112,31 @@ const getJobById = async_handler(async (req, res) => {
  */
 const updateJob = async_handler(async (req, res) => {
   try {
-    const job = await Job.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    // Only allow updates to known fields
+    const allowed = [
+      'startupId',
+      'role',
+      'aboutRole',
+      'keyResponsibilities',
+      'requirements',
+      'perksAndBenifits',
+      'stipend',
+      'salary',
+      'openings',
+      'deadline'
+    ];
+
+    const updates = {};
+    Object.keys(req.body || {}).forEach((k) => {
+      if (allowed.includes(k)) updates[k] = req.body[k];
+    });
+
+    if (updates.startupId) {
+      const s = await StartupProfile.findById(updates.startupId);
+      if (!s) return res.status(404).json({ success: false, error: 'Startup not found' });
+    }
+
+    const job = await Job.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
 
     if (!job) {
       return res.status(404).json({
@@ -144,12 +191,3 @@ module.exports = {
   updateJob,
   deleteJob
 };
-
-
-
-
-
-
-
-
-

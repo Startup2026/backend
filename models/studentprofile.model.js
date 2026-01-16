@@ -17,6 +17,10 @@ const studentProfileSchema = new mongoose.Schema({
   location: { type: String },
   bio: { type: String, maxlength: 300 },
   
+  profilepic: {
+      type: String,
+      trim: true
+    },
   // Update Education to be an Array and match frontend keys
   education: [{
     institution: { type: String, required: true },

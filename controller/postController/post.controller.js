@@ -1,5 +1,5 @@
 const Post = require('../../models/post.model');
-const User = require('../../models/user.model');
+const StartupModel = require('../../models/startupprofile.model');
 const async_handler = require("express-async-handler");
 
 /**
@@ -8,26 +8,43 @@ const async_handler = require("express-async-handler");
  */
 const createPost = async_handler(async (req, res) => {
   try {
-    const { createdBy } = req.body;
+    const {
+      startupid,
+      title,
+      description,
+      media
+    } = req.body;
+
+    if (!startupid) {
+      return res.status(400).json({
+        success: false,
+        error: 'startupid is required'
+      });
+    }
 
     // Check if user exists
-    const user = await User.findById(createdBy);
+    const user = await StartupModel.findById(startupid);
     if (!user) {
       return res.status(404).json({
         success: false,
-        error: 'User not found'
+        error: 'startup not found'
       });
     }
 
-    // Check role
-    if (user.role !== "STARTUP") {
-      return res.status(403).json({
-        success: false,
-        error: 'Only startups are allowed to create posts'
-      });
-    }
+    // // Check role
+    // if (user.role !== "STARTUP") {
+    //   return res.status(403).json({
+    //     success: false,
+    //     error: 'Only startups are allowed to create posts'
+    //   });
+    // }
 
-    const post = new Post(req.body);
+    const post = new Post({
+      startupid,
+      title,
+      description,
+      media
+    });
     await post.save();
 
     return res.status(201).json({
@@ -49,7 +66,7 @@ const createPost = async_handler(async (req, res) => {
 const getPosts = async_handler(async (req, res) => {
   try {
     const posts = await Post.find()
-      .populate('createdBy', 'name email role')
+      .populate('startupid', 'name email role')
       .sort({ createdAt: -1 });
 
     return res.json({
@@ -71,7 +88,7 @@ const getPosts = async_handler(async (req, res) => {
 const getPostById = async_handler(async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
-      .populate('createdBy', 'name email role')
+      .populate('startupid', 'name email role')
       .populate('comments.user', 'name');
 
     if (!post) {
@@ -121,9 +138,50 @@ const deletePost = async_handler(async (req, res) => {
   }
 });
 
+/**
+ * UPDATE POST
+ */
+const updatePost = async_handler(async (req, res) => {
+  try {
+    // Whitelist allowed fields
+    const allowed = [
+      'title',
+      'description',
+      'media',
+      'likes'
+    ];
+
+    const updates = {};
+    Object.keys(req.body || {}).forEach((k) => {
+      if (allowed.includes(k)) updates[k] = req.body[k];
+    });
+
+    const post = await Post.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        error: 'Post not found'
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: post
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(400).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
 module.exports = {
   createPost,
   getPosts,
   getPostById,
+  updatePost,
   deletePost
 };

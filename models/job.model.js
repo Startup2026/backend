@@ -6,14 +6,31 @@ const jobSchema = new mongoose.Schema({
     ref: "StartupProfile",
     required: true
   },
-  title: {
+  role:{
+    type:String,
+    required:true
+  },
+  aboutRole: {
     type: String,
     required: true
   },
-  description: String,
-  experienceRequired: Number,
-  educationRequired: String,
-  skillsRequired: [String]
+  keyResponsibilities:{type: String},
+  requirements: {type:String},
+  perksAndBenifits:{type:String},
+  stipend:{
+    type:Boolean,
+    default:false
+  },
+  salary:{
+    type:Number
+  },
+  openings:{
+    type:Number,
+  },
+  deadline:{
+    type:String,
+    required:true
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model("Job", jobSchema);

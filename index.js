@@ -11,7 +11,6 @@ const userModel = require("./models/user.model");
 const cookieParser = require("cookie-parser");
 const applicationRouter=require("./router/applications.routes.js");
 const startupProfileRouter=require("./router/startupProfile.routes.js");
-const studentProfileRouter=require("./router/studentProfile.routes.js");
 const userRouter=require("./router/users.routes.js");
 const graphicalRouter=require("./router/graphical.routes.js");
 const interviewsRouter=require("./router/interviews.routes.js");
@@ -21,6 +20,8 @@ const mainSummaryRouter=require("./router/mainSummary.routes.js");
 const myJobApplicationsRouter=require("./router/myJobApplications.routes.js");
 const postsRouter=require("./router/posts.routes.js");
 const selectionsRouter=require("./router/selections.routes.js");
+const saveJobRouter=require("./router/saveJob.routes.js");
+const savPostRouter=require("./router/savePost.routes.js");
 
 dotenv.config();
 connectDB();
@@ -63,7 +64,8 @@ app.use("/api", myJobApplicationsRouter);
 app.use("/api", postsRouter);
 app.use("/api", selectionsRouter);
 app.use("/api", startupProfileRouter);
-app.use("/api", studentProfileRouter);
+app.use("/api", saveJobRouter);
+app.use("/api", savPostRouter);
 
 const isProduction = process.env.NODE_ENV === "production";
 

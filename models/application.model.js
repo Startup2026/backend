@@ -15,10 +15,6 @@ const applicationSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  skills:{
-      type:String,
-      default:null
-  },
   status: {
     type: String,
     enum: [
@@ -29,6 +25,10 @@ const applicationSchema = new mongoose.Schema({
       "SELECTED"
     ],
     default: "APPLIED"
+  },
+  resumeUrl: {
+    type: String,
+    default: null
   }
 }, { timestamps: true });
 

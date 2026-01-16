@@ -1,6 +1,6 @@
 const async_handler = require("express-async-handler")
 const Application = require("../../models/application.model");
-
+// Student Dashboard
 
 const summary = async_handler(async (req, res) => {
     const { studentId } = req.params

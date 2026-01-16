@@ -8,7 +8,10 @@ const startupSchema = new mongoose.Schema(
       required: true,
       index: true
     },
-
+    profilepic: {
+      type: String,
+      trim: true
+    },
     startupName: {
       type: String,
       required: true,
@@ -17,16 +20,31 @@ const startupSchema = new mongoose.Schema(
       maxlength: 100
     },
 
+    numberOfEmployees: {
+      type: Number,
+      min: 1
+    },
+
     tagline: {
       type: String,
       trim: true,
       maxlength: 150
     },
 
-    description: {
+    aboutus: {
       type: String,
       trim: true,
       maxlength: 2000
+    },
+    productOrService: {
+      type: String,
+      trim: true,
+      maxlength: 1000
+    },
+    cultureAndValues: {
+      type: String,
+      trim: true,
+      maxlength: 1000
     },
 
     industry: {
@@ -37,7 +55,7 @@ const startupSchema = new mongoose.Schema(
         "EdTech",
         "HealthTech",
         "AI/ML",
-        "SaaS",
+        "SaaS", 
         "E-Commerce",
         "Web3",
         "Other"
@@ -95,7 +113,23 @@ const startupSchema = new mongoose.Schema(
         ref: "Admin"
       },
       verifiedAt: Date
-    }
+    },
+    leadershipTeam: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+      },
+      role: String
+    }],
+    updates: [{
+      title: String,
+      content: String,
+      date: Date
+    }],
+    verified: {
+      type: Boolean,
+      default: false
+    }    
   },
   {
     timestamps: true

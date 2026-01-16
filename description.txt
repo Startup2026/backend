@@ -1,168 +1,64 @@
+{
+    "success": true,
+    "data": {
+        "username": "Sanchit Kumbhar",
+        "email": "sanchitskumbhar@gmail.com",
+        "role": "student",
+        "profileCompleted": false,
+        "_id": "6968b148c614b04e3ae1b1e8",
+        "createdAt": "2026-01-15T09:20:08.140Z",
+        "updatedAt": "2026-01-15T09:20:08.140Z",
+        "__v": 0
+    }
+}
 
-## 🧾 Navigation overview
-- Dashboard (Summary)
-- Jobs (Browse & Job detail, no create)
-- Applications (All applications, per-job, per-student)
-- Selected Candidates (batch select & notify)
-- Interview Schedule (create + view schedules)
-- Job Analysis / Graphs (trends & distributions)
-- Users & Profiles (view/create startup/student profiles — no edit)
 
----
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NjhiMTQ4YzYxNGIwNGUzYWUxYjFlOCIsInJvbGUiOiJzdHVkZW50IiwiaWF0IjoxNzY4NDY5MTY3LCJleHAiOjE3NjkwNzM5Njd9.BFox0tUi5jf1xaafQfuQ3sWvVAJjDaOWtptSMwsVUEc
 
-## 🧾 Dashboard / Main summary (Nav: Dashboard)
-Purpose: quick stats
-- Endpoint:
-  - GET `/get-main-summary` (protected)
-  - Response shape: `{ mainSummary: { totalApplications, totalShortlisted, totalRejected, lastsevendays, avgATS } }`
-- UI:
-  - Cards: Total Applications, Shortlisted, Rejected, Last 7 days applications, Avg ATS
-  - Small chart for last7days (optional)
-
----
-
-## 💼 Jobs (Nav: Jobs)
-Purpose: browse and view job details & summary (no creation/edit)
-- Endpoints:
-  - GET `/get-all-jobs` → list of jobs (include startup metadata)
-  - GET `/get-job/:id` → job detail
-  - GET `/job-summary/:jobId` → job-specific summary `{ totalApplications, percentageMeetingCriteria, averageATS, medianExperience }`
-- UI:
-  - Jobs list: search, filters (industry, experience), pagination
-  - Job detail: job fields, link to Applications list for this job, button “View Job Summary”
-  - Job Summary modal/page: show metrics + chart for distribution if needed
-- States:
-  - Loading, empty state (“No jobs found”), error toast
-
----
-
-## 📨 Applications (Nav: Applications)
-Purpose: manage & inspect applications
-- Endpoints:
-  - POST `/applications/:jobId/:studentId` — create application (if needed)
-  - GET `/applications` — all apps (admin/startup)
-  - GET `/applications/:jobId/:studentId` — single (if used)
-  - PUT `/applications/:applicationid` — update status/data
-  - DELETE `/applications/:applicationId`
-- UI:
-  - Applications list (table): columns — Candidate, Job, Status, ATS, Skills, CreatedAt, Actions
-  - Filters: by job, status (PENDING, SHORTLISTED, REJECTED, INTERVIEW_SCHEDULED, SELECTED), date range
-  - Row actions: View details, Shortlist, Schedule Interview, Select / Mark Selected, Delete
-  - Bulk actions: checkboxes + “Shortlist”, “Send Selection Email”, “Schedule Interviews (batch)” (where supported)
-- States & validation:
-  - Confirm modals for delete/send actions
-  - Toasts for success/failure; inline error details for batch results
-
----
-
-## ✅ Selected Candidates (Nav: Selected Candidates)
-Purpose: send selection emails and view status
-- Endpoint:
-  - POST `/selections/notify` (protected)
-    - Body: `{ subject?, message?, applicationIdList: ["id1","id2", ...] }`
-    - Response: `{ success: true, results: { sent: [...], failed: [...] } }`
-- UI:
-  - Selected candidates page: table filtered to `status === SELECTED` or allow selecting rows and pressing “Send Selection Email”
-  - Batch UI: checkbox select multiple, open “Send Selection Email” modal with Subject & Message, Confirm -> API call
-  - Show per-application result: success list / failed list with reasons
-- UX notes:
-  - Disable button while in progress; show spinner
-  - Show counts: Sent X / Failed Y and per-row error messages
-  - Mark application status to `SELECTED` on success (backend already updates)
-
----
-
-## 🗓 Interview Schedule (Nav: Interview Schedule)
-Purpose: schedule interviews and notify shortlisted applicants
-- Endpoint:
-  - POST `/interviews/:applicationId/schedule` (protected)
-    - Body: `{ interviewDate, interviewTime, mode, interviewLink, interviewer, notes }`
-    - Response: success message
-- Behavior:
-  - On save, backend triggers emails to shortlisted applicants and updates application status to `INTERVIEW_SCHEDULED` (controller handles send + status update).
-- UI:
-  - Schedule page: Form to pick application (searchable), date/time pickers, mode (Online/In-person), link, interviewer, notes
-  - Schedule history: list scheduled interviews per application/job
-  - Notifications: confirmation when emails successfully queued/sent; show failures
-- UX:
-  - Calendar view (optional) with scheduled interviews by date
-  - Edit/cancel schedule (if implemented server-side) — show disabled if not supported
-
----
-
-## 📊 Job Analysis / Graphs (Nav: Job Analysis)
-Purpose: show trends & distributions for applications
-- Endpoints:
-  - GET `/get-job-post-day-wise-trend` → returns date-wise counts for N days
-  - GET `/get-job-post-education` → distribution by degree/college/year. Query param: `?by=degree|college|graduationYear` and optional `?jobId=...`
-  - GET `/get-main-skills` → skills distribution, optional `?jobId=...`
-  - GET `/job-summary/:jobId` — already in Jobs section for per-job statistics
-- UI:
-  - Charts:
-    - Line chart: applications over the last N days
-    - Bar/Pie: education distribution, skills distribution
-  - Filters: jobId (optional), by param for education, date range
-- UX:
-  - Allow exporting charts as PNG/CSV (optional)
-  - Display top N items with “See more” expanding
-
----
-
-## 👥 Users & Profiles (Nav: Users / Profiles)
-Purpose: view users and profiles; create student/startup profile; no edit UI
-- Endpoints:
-  - GET users (protected) — list users (no password)
-  - GET `/users/:id`
-  - POST `/startupProfile` — create startup profile (body: relevant fields)
-  - POST `/studentProfile` — create student profile
-  - GET `/startupProfiles`, `/startupProfile/:id`
-  - GET `/studentProfiles`, `/studentProfile/:id`
-- UI:
-  - Users list with roles filter (STUDENT, STARTUP)
-  - Profile cards/pages showing profile details and related items (jobs for startup, applications for student)
-  - "Create Profile" forms (for student/startup) — use server validations
-- Notes:
-  - **Do not** implement edit profile page (per your request); show read-only or "profile incomplete" prompts if no profile exists
-
----
-
-## 🧪 My Job Applications (Student view)
-Purpose: student-specific summary
-- Endpoint:
-  - GET `/my-applications/summary/:studentId`
-  - Response: counts for applied, shortlisted, pending (aggregates)
-- UI:
-  - Student dashboard snippet with counts and quick links to applications
-
----
-
-## ✉️ Notifications & Emails (General)
-- Emails are sent from backend (interview scheduling & selection notification).
-- UI should show:
-  - API call results (sent/failed)
-  - Detailed failure reasons (from `results.failed` items) where possible
-- Confirmations: use modal + toast pattern before sending bulk emails
-
----
-
-## ✅ Error handling & UX conventions
-- Consistent error toast for server errors.
-- Field-level validation messages for forms.
-- Confirmation dialogs for destructive/bulk actions.
-- Show per-item results for batch operations (not just aggregate success).
-
----
-
-## 💡 Extras / Recommendations (optional but useful)
-- Add CSV import for batch selection (upload IDs) — server-side support already discussed.
-- Add a "Retry Failed Sends" action in Selected Candidates.
-- Rate-limit bulk email button to prevent accidental spam.
-- Add activity logs for actions like "Selection email sent" / "Interview scheduled"
-
----
-
-If you want, I can:
-- Produce a compact Postman collection or JSON endpoints doc to hand off to your frontend dev ✅  
-- Or generate wireframe sketches (descriptions) for key screens (Selected Candidates modal, Schedule modal, Job Analysis dashboard) 💡
-
-Which would you like me to deliver next?
+{
+    "success": true,
+    "data": {
+        "username": "startup",
+        "email": "startup@gmail.com",
+        "role": "student",
+        "profileCompleted": false,
+        "_id": "6968b35cc614b04e3ae1b1ec",
+        "createdAt": "2026-01-15T09:29:00.213Z",
+        "updatedAt": "2026-01-15T09:29:00.213Z",
+        "__v": 0
+    }
+}
+{
+    "success": true,
+    "data": {
+        "userId": "6968b35cc614b04e3ae1b1ec",
+        "profilepic": "https://res.cloudinary.com/demo/image/upload/v123456/startup_logo.png",
+        "startupName": "NovaFlow AI",
+        "numberOfEmployees": 5,
+        "tagline": "Revolutionizing workflow automation with intelligent agents.",
+        "productOrService": "Our core product is an AI-driven dashboard that integrates with Slack and Jira to automate project management tasks, reducing manual overhead by 40%.",
+        "cultureAndValues": "We value transparency, rapid iteration, and user-centric design. We operate with a remote-first mindset.",
+        "industry": "AI/ML",
+        "stage": "MVP",
+        "website": "https://novaflow.demo.com",
+        "socialLinks": {
+            "linkedin": "https://linkedin.com/company/novaflow-ai",
+            "twitter": "https://twitter.com/novaflowai",
+            "github": "https://github.com/novaflow"
+        },
+        "foundedYear": 2024,
+        "teamSize": 5,
+        "location": {
+            "city": "Pune",
+            "country": "India"
+        },
+        "hiring": true,
+        "verified": false,
+        "_id": "6968cab8c614b04e3ae1b1ef",
+        "leadershipTeam": [],
+        "updates": [],
+        "createdAt": "2026-01-15T11:08:40.881Z",
+        "updatedAt": "2026-01-15T11:08:40.881Z",
+        "__v": 0
+    }
+}
