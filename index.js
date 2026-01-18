@@ -22,6 +22,7 @@ const postsRouter=require("./router/posts.routes.js");
 const selectionsRouter=require("./router/selections.routes.js");
 const saveJobRouter=require("./router/saveJob.routes.js");
 const savPostRouter=require("./router/savePost.routes.js");
+const analyticsRouter = require("./router/analytics.routes.js");
 
 dotenv.config();
 connectDB();
@@ -66,6 +67,9 @@ app.use("/api", selectionsRouter);
 app.use("/api", startupProfileRouter);
 app.use("/api", saveJobRouter);
 app.use("/api", savPostRouter);
+
+app.use("/api", analyticsRouter);
+
 
 const isProduction = process.env.NODE_ENV === "production";
 
