@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const interviewController = require('../controller/interviewScheduleController/interviewSchedule.controller');
+const interviewController = require('../controller/startups/interviewScheduleController/interviewSchedule.controller');
 const token__middleware = require('../middleware/jwttoken.middleware');
 
 // Schedule an interview for an application

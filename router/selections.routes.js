@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const selectionController = require('../controller/selectionController/selection.controller');
+const selectionController = require('../controller/startups/selectionController/selection.controller');
 const token__middleware = require('../middleware/jwttoken.middleware');
 
 // POST /selections/notify

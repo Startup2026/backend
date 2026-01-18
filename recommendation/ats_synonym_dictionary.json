@@ -1,0 +1,123 @@
+{
+  "javascript": [
+    "js",
+    "javascript",
+    "ecmascript"
+  ],
+  "python": [
+    "py",
+    "python"
+  ],
+  "java": [
+    "java",
+    "jdk"
+  ],
+  "c++": [
+    "cpp",
+    "c plus plus",
+    "cplusplus"
+  ],
+  "c": [
+    "c language"
+  ],
+  "node": [
+    "nodejs",
+    "node.js"
+  ],
+  "react": [
+    "reactjs",
+    "react.js"
+  ],
+  "angular": [
+    "angularjs"
+  ],
+  "vue": [
+    "vuejs"
+  ],
+  "express": [
+    "expressjs"
+  ],
+  "django": [
+    "django framework"
+  ],
+  "flask": [
+    "flask framework"
+  ],
+  "spring": [
+    "springboot",
+    "spring boot"
+  ],
+  "sql": [
+    "sql",
+    "structured query language"
+  ],
+  "mysql": [
+    "my sql"
+  ],
+  "postgresql": [
+    "postgres",
+    "postgre"
+  ],
+  "mongodb": [
+    "mongo",
+    "mongo db"
+  ],
+  "api": [
+    "apis",
+    "rest",
+    "restapi",
+    "rest api"
+  ],
+  "backend": [
+    "back end",
+    "server side"
+  ],
+  "frontend": [
+    "front end",
+    "client side"
+  ],
+  "fullstack": [
+    "full stack",
+    "full-stack"
+  ],
+  "cloud": [
+    "aws",
+    "gcp",
+    "azure"
+  ],
+  "aws": [
+    "amazon web services"
+  ],
+  "docker": [
+    "docker container"
+  ],
+  "kubernetes": [
+    "k8s"
+  ],
+  "git": [
+    "github",
+    "gitlab",
+    "version control"
+  ],
+  "ml": [
+    "machine learning"
+  ],
+  "ai": [
+    "artificial intelligence"
+  ],
+  "nlp": [
+    "natural language processing"
+  ],
+  "internship": [
+    "intern",
+    "internship"
+  ],
+  "fresher": [
+    "graduate",
+    "entry level"
+  ],
+  "experienced": [
+    "experience",
+    "senior"
+  ]
+}

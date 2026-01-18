@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const job = require('../controller/jobController/job.controller');
+const job = require('../controller/common/jobController/job.controller');
 const token__middleware = require('../middleware/jwttoken.middleware');
 
 router.post('/create-job', token__middleware, job.createJob);

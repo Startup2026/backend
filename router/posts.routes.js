@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const post = require('../controller/postController/post.controller');
+const post = require('../controller/common/postController/post.controller');
 const token__middleware = require('../middleware/jwttoken.middleware');
 const uploads = require('../middleware/fileuploads.middleware');
 

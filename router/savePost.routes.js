@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const savePostController = require('../controller/savePostCoontrolller/savePost.controller');
+const savePostController = require('../controller/students/savePostCoontrolller/savePost.controller');
 const token__middleware = require('../middleware/jwttoken.middleware');
 
 // POST /sav-posts/:postId

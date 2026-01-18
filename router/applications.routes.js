@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const applicationController = require('../controller/applicationController/applications.controller');
+const applicationController = require('../controller/common/applicationController/applications.controller');
 const token__middleware = require('../middleware/jwttoken.middleware');
 const uploads = require('../middleware/fileuploads.middleware');
 
