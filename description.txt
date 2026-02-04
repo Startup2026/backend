@@ -1,64 +1,7 @@
-{
-    "success": true,
-    "data": {
-        "username": "Sanchit Kumbhar",
-        "email": "sanchitskumbhar@gmail.com",
-        "role": "student",
-        "profileCompleted": false,
-        "_id": "6968b148c614b04e3ae1b1e8",
-        "createdAt": "2026-01-15T09:20:08.140Z",
-        "updatedAt": "2026-01-15T09:20:08.140Z",
-        "__v": 0
-    }
-}
+dummy data generated for student and startup profile and 
+dummy data for jobs and social media posts
 
+without database testing succeed
 
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5NjhiMTQ4YzYxNGIwNGUzYWUxYjFlOCIsInJvbGUiOiJzdHVkZW50IiwiaWF0IjoxNzY4NDY5MTY3LCJleHAiOjE3NjkwNzM5Njd9.BFox0tUi5jf1xaafQfuQ3sWvVAJjDaOWtptSMwsVUEc
-
-{
-    "success": true,
-    "data": {
-        "username": "startup",
-        "email": "startup@gmail.com",
-        "role": "student",
-        "profileCompleted": false,
-        "_id": "6968b35cc614b04e3ae1b1ec",
-        "createdAt": "2026-01-15T09:29:00.213Z",
-        "updatedAt": "2026-01-15T09:29:00.213Z",
-        "__v": 0
-    }
-}
-{
-    "success": true,
-    "data": {
-        "userId": "6968b35cc614b04e3ae1b1ec",
-        "profilepic": "https://res.cloudinary.com/demo/image/upload/v123456/startup_logo.png",
-        "startupName": "NovaFlow AI",
-        "numberOfEmployees": 5,
-        "tagline": "Revolutionizing workflow automation with intelligent agents.",
-        "productOrService": "Our core product is an AI-driven dashboard that integrates with Slack and Jira to automate project management tasks, reducing manual overhead by 40%.",
-        "cultureAndValues": "We value transparency, rapid iteration, and user-centric design. We operate with a remote-first mindset.",
-        "industry": "AI/ML",
-        "stage": "MVP",
-        "website": "https://novaflow.demo.com",
-        "socialLinks": {
-            "linkedin": "https://linkedin.com/company/novaflow-ai",
-            "twitter": "https://twitter.com/novaflowai",
-            "github": "https://github.com/novaflow"
-        },
-        "foundedYear": 2024,
-        "teamSize": 5,
-        "location": {
-            "city": "Pune",
-            "country": "India"
-        },
-        "hiring": true,
-        "verified": false,
-        "_id": "6968cab8c614b04e3ae1b1ef",
-        "leadershipTeam": [],
-        "updates": [],
-        "createdAt": "2026-01-15T11:08:40.881Z",
-        "updatedAt": "2026-01-15T11:08:40.881Z",
-        "__v": 0
-    }
-}
+testing with database:
+cold-start tested static posts showing

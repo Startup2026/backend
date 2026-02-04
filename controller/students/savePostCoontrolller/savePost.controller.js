@@ -4,53 +4,51 @@ const SavePost = require('../../../models/savePost.model');
 const savePost = async_handler(async (req, res) => {
     try {
         const { studentId, postId } = req.body;
-        const existingSave = await SavePost.findOne({ studentId, postId });
+
+        // FIX: Your SavePost model requires 'jobId', even for posts
+        const existingSave = await SavePost.findOne({ studentId, jobId: postId });
+        
         if (existingSave) {
             return res.status(400).json({ success: false, error: 'Post already saved' });
         }   
-        const savePost = new SavePost({ studentId, postId });
+        
+        const savePost = new SavePost({ 
+            studentId, 
+            jobId: postId // Mapping postId -> jobId
+        });
+        
         await savePost.save();
         return res.status(201).json({ success: true, data: savePost });
     } catch (err) {
-        console.error(err);
+        console.error("Save Error:", err);
         return res.status(400).json({ success: false, error: err.message });
     }   
 });
 
-/**
- * GET SAVED POSTS
- */
 const getSavedPosts = async_handler(async (req, res) => {
     try {
         const { studentId } = req.body;
-        if (!studentId) {
-            return res.status(400).json({ success: false, error: 'studentId is required' });
-        }
-        const savedPosts = await SavePost.find({ studentId }).populate('postId');
+        // Populate 'jobId' because that's where the Post ID is stored
+        const savedPosts = await SavePost.find({ studentId }).populate('jobId');
         return res.json({ success: true, data: savedPosts });
     } catch (err) {
-        console.error(err);
         return res.status(500).json({ success: false, error: err.message });
     }
 });
 
-/**
- * REMOVE SAVED POST
- */
 const removeSavedPost = async_handler(async (req, res) => {
     try {
         const { postId } = req.params;
         const { studentId } = req.body;
-        if (!postId || !studentId) {
-            return res.status(400).json({ success: false, error: 'postId and studentId are required' });
-        }
-        const savedPost = await SavePost.findOneAndDelete({ studentId, postId });
+        
+        // Find by jobId
+        const savedPost = await SavePost.findOneAndDelete({ studentId, jobId: postId });
+        
         if (!savedPost) {
             return res.status(404).json({ success: false, error: 'Saved post not found' });
         }
         return res.json({ success: true, data: savedPost });
     } catch (err) {
-        console.error(err);
         return res.status(500).json({ success: false, error: err.message });
     }
 });

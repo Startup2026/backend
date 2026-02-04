@@ -6,7 +6,7 @@ const createApplication = async_handler(async (req, res) => {
         atsScore, status
     } = req.body;
     const { jobId, studentId } = req.params;
-
+    console.log(jobId)
     const newApplication = new Application({ atsScore, status, jobId, studentId });
     await newApplication.save();
 

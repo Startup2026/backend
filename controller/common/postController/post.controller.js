@@ -85,29 +85,20 @@ const getPosts = async_handler(async (req, res) => {
 /**
  * GET POST BY ID
  */
+// post.controller.js
 const getPostById = async_handler(async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
-      .populate('startupid', 'name email role')
-      .populate('comments.user', 'name');
+      .populate('startupid', 'startupName email role profilepic verified')
+      // Ensure 'username' is included in the select string
+      .populate('comments.user', 'username name avatar'); 
 
     if (!post) {
-      return res.status(404).json({
-        success: false,
-        error: 'Post not found'
-      });
+      return res.status(404).json({ success: false, error: 'Post not found' });
     }
-
-    return res.json({
-      success: true,
-      data: post
-    });
+    return res.json({ success: true, data: post });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      success: false,
-      error: err.message
-    });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

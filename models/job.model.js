@@ -30,6 +30,15 @@ const jobSchema = new mongoose.Schema({
   deadline:{
     type:String,
     required:true
+  },
+  jobType:{
+    type:String,
+    enum:["Remote","Hybrid","Offline"],
+    required:true
+  },
+  Tag:{
+    type:[String],
+    required:true
   }
 }, { timestamps: true });
 

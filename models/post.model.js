@@ -3,28 +3,25 @@ const mongoose = require("mongoose");
 const post = new mongoose.Schema({
     startupid: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "StartupProfile",
+        ref: "StartupProfile", 
         required: true,
     },
     media: {
-        video: {
-            type: String,
-        },
-        photo: {
-            type: String
+        video: { type: String },
+        photo: { type: String }
+    },
+    title: { type: String },
+    description: { type: String },
+    
+    // The strict Schema that was causing issues with old data.
+    // The new controller logic will fix the data to match this.
+    likes: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User"
         }
-    },
-    title: {
-        type: String
-    },
-    description: {
-        type: String
-    },
-    likes: {
-        type: Number,
-        default: 0,
-        required: false
-    },
+    ],
+
     comments: [
         {
             user: {
@@ -43,7 +40,6 @@ const post = new mongoose.Schema({
             }
         }
     ]
-
 }, { timestamps: true });
 
 module.exports = mongoose.model("post", post);

@@ -7,7 +7,6 @@ const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const path = require("path");
 const connectDB = require("./config/config");
-const userModel = require("./models/user.model");
 const cookieParser = require("cookie-parser");
 const applicationRouter=require("./router/applications.routes.js");
 const startupProfileRouter=require("./router/startupProfile.routes.js");
@@ -22,14 +21,16 @@ const postsRouter=require("./router/posts.routes.js");
 const selectionsRouter=require("./router/selections.routes.js");
 const saveJobRouter=require("./router/saveJob.routes.js");
 const savPostRouter=require("./router/savePost.routes.js");
-
+const recommendationRouter=require("./router/recommendations.routes.js")
+const mongoose = require("mongoose");
+const review=require("./router/review.routes.js")
 dotenv.config();
 connectDB();
 
 const app = express();
 
 // Allow requests from your React frontend with credentials (cookies)
-const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:8080'];
+const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:5173'];
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (curl, mobile apps, etc.)
@@ -66,6 +67,10 @@ app.use("/api", selectionsRouter);
 app.use("/api", startupProfileRouter);
 app.use("/api", saveJobRouter);
 app.use("/api", savPostRouter);
+app.use("/api", review);
+// Mount recommendations router under /api/recommendations
+// so routes like '/cold-start/jobs' become '/api/recommendations/cold-start/jobs'
+app.use("/api/recommendations", recommendationRouter)
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -75,3 +80,4 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
 });
+
