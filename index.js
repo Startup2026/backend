@@ -30,7 +30,7 @@ connectDB();
 const app = express();
 
 // Allow requests from your React frontend with credentials (cookies)
-const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:5173'];
+const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:5173','https://wostup.netlify.app'];
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (curl, mobile apps, etc.)
