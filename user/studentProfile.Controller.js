@@ -3,6 +3,18 @@ const User = require('../models/user.model');
 const async_handler = require("express-async-handler");
 const mongoose = require('mongoose');
 
+const parseMaybeJson = (value, fallback) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      return fallback !== undefined ? fallback : value;
+    }
+  }
+  return value;
+};
+
 const createProfile = async_handler(async (req, res) => {
   try {
     // Prefer authenticated user id (from token); fall back to body.userId if present
@@ -22,7 +34,6 @@ const createProfile = async_handler(async (req, res) => {
       phone,
       location,
       bio,
-      profilepic,
       education,
       skills,
       interests,
@@ -32,6 +43,20 @@ const createProfile = async_handler(async (req, res) => {
       resumeUrl,
       experience
     } = req.body;
+
+    const parsedEducation = parseMaybeJson(education, []);
+    const parsedSkills = parseMaybeJson(skills, []);
+    const parsedInterests = parseMaybeJson(interests, []);
+    const parsedExperience = parseMaybeJson(experience, []);
+
+    let profilepic = req.body.profilepic;
+    let resumeFileUrl = resumeUrl;
+    if (req.files?.profilepic?.[0]) {
+      profilepic = `/media/${req.files.profilepic[0].filename}`;
+    }
+    if (req.files?.resume?.[0]) {
+      resumeFileUrl = `/media/${req.files.resume[0].filename}`;
+    }
 
     // Basic check: ensure user exists
     const user = await User.findById(userId);
@@ -49,14 +74,14 @@ const createProfile = async_handler(async (req, res) => {
       location,
       bio,
       profilepic,
-      education,
-      skills,
-      interests,
+      education: parsedEducation,
+      skills: parsedSkills,
+      interests: parsedInterests,
       githubUrl,
       linkedinUrl,
       portfolioUrl,
-      resumeUrl,
-      experience
+      resumeUrl: resumeFileUrl,
+      experience: parsedExperience
     });
     await profile.save();
 
@@ -127,10 +152,23 @@ const updateProfile = async_handler(async (req, res) => {
       'experience'
     ];
 
+    const jsonFields = ['education', 'skills', 'interests', 'experience'];
     const updates = {};
     Object.keys(req.body || {}).forEach((k) => {
-      if (allowed.includes(k)) updates[k] = req.body[k];
+      if (!allowed.includes(k)) return;
+      if (jsonFields.includes(k)) {
+        updates[k] = parseMaybeJson(req.body[k], []);
+      } else {
+        updates[k] = req.body[k];
+      }
     });
+
+    if (req.files?.profilepic?.[0]) {
+      updates.profilepic = `/media/${req.files.profilepic[0].filename}`;
+    }
+    if (req.files?.resume?.[0]) {
+      updates.resumeUrl = `/media/${req.files.resume[0].filename}`;
+    }
 
     if (req.params.id === 'me') {
       const profile = await StudentProfile.findOneAndUpdate({ userId: req.user.id }, updates, { new: true, runValidators: true });
