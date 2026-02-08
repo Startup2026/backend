@@ -312,7 +312,7 @@ const posts = await Post.find()
   async getColdStartJobRecommendations(limit = 10) {
     const jobs = await Job.find()
       .sort({ createdAt: -1 })
-      .populate("startupId", "startupName industry")
+      .populate("startupId", "startupName industry location")
       .limit(limit)
       .lean();
 
@@ -320,14 +320,15 @@ const posts = await Post.find()
       _id: job._id,
       role: job.role,
       aboutRole: job.aboutRole || "",
-      location: job.location || "",
+      // Remove job.location as it keeps being undefined
       jobType: job.jobType,
       tags: Array.isArray(job.tags) ? job.tags : [],
       stipend: job.stipend === true,
       salary: job.stipend === true ? job.salary : null,
       startup: {
         startupName: job.startupId?.startupName || "Startup",
-        industry: job.startupId?.industry || "Tech"
+        industry: job.startupId?.industry || "Tech",
+        location: job.startupId?.location || ""
       },
       coldStart: true,
       scores: { final: 0 }

@@ -21,6 +21,7 @@ const postsRouter=require("./router/posts.routes.js");
 const selectionsRouter=require("./router/selections.routes.js");
 const saveJobRouter=require("./router/saveJob.routes.js");
 const savPostRouter=require("./router/savePost.routes.js");
+const notificationRouter=require("./router/notifications.routes.js");
 const recommendationRouter=require("./router/recommendations.routes.js")
 const mongoose = require("mongoose");
 const review=require("./router/review.routes.js")
@@ -67,6 +68,7 @@ app.use("/api", selectionsRouter);
 app.use("/api", startupProfileRouter);
 app.use("/api", saveJobRouter);
 app.use("/api", savPostRouter);
+app.use("/api", notificationRouter);
 app.use("/api", review);
 // Mount recommendations router under /api/recommendations
 // so routes like '/cold-start/jobs' become '/api/recommendations/cold-start/jobs'

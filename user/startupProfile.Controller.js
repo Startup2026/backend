@@ -2,6 +2,26 @@ const StartupProfile = require('../models/startupprofile.model');
 const User = require('../models/user.model');
 const async_handler = require("express-async-handler");
 
+const buildSocialLinks = (socialLinks, linkedinUrl, twitterUrl, githubUrl) => {
+  const merged = { ...(socialLinks || {}) };
+  if (linkedinUrl) merged.linkedin = linkedinUrl;
+  if (twitterUrl) merged.twitter = twitterUrl;
+  if (githubUrl) merged.github = githubUrl;
+  return Object.keys(merged).length ? merged : undefined;
+};
+
+const normalizeLocation = (location, city, country) => {
+  if (location && typeof location === 'object') return location;
+  if (typeof location === 'string') {
+    const parts = location.split(',').map((part) => part.trim());
+    const parsedCity = parts[0] || '';
+    const parsedCountry = parts[1] || '';
+    if (parsedCity || parsedCountry) return { city: parsedCity, country: parsedCountry };
+  }
+  if (city || country) return { city: city || '', country: country || '' };
+  return undefined;
+};
+
 const createProfile = async_handler(async (req, res) => {
   try {
     // prefer authenticated user id when available
@@ -17,7 +37,8 @@ const createProfile = async_handler(async (req, res) => {
     const {
       startupName,
       tagline,
-      description, // map to aboutus
+      description, // legacy alias for aboutus
+      aboutus,
       industry,
       stage,
       profilepic,
@@ -29,7 +50,13 @@ const createProfile = async_handler(async (req, res) => {
       foundedYear,
       teamSize,
       location,
-      hiring
+      hiring,
+      linkedinUrl,
+      twitterUrl,
+      githubUrl,
+      city,
+      country,
+      leadershipTeam
     } = req.body;
 
     if (!startupName) return res.status(400).json({ success: false, error: 'startupName is required' });
@@ -38,11 +65,14 @@ const createProfile = async_handler(async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
+    const resolvedSocialLinks = buildSocialLinks(socialLinks, linkedinUrl, twitterUrl, githubUrl);
+    const resolvedLocation = normalizeLocation(location, city, country);
+
     const profile = new StartupProfile({
       userId,
       startupName,
       tagline,
-      aboutus: description,
+      aboutus: aboutus || description,
       industry,
       stage,
       profilepic,
@@ -50,11 +80,12 @@ const createProfile = async_handler(async (req, res) => {
       productOrService,
       cultureAndValues,
       website,
-      socialLinks,
+      socialLinks: resolvedSocialLinks,
       foundedYear,
       teamSize,
-      location,
-      hiring
+      location: resolvedLocation,
+      hiring,
+      leadershipTeam
     });
     await profile.save();
 
@@ -115,7 +146,8 @@ const updateProfile = async_handler(async (req, res) => {
       'teamSize',
       'location',
       'hiring',
-      'verified'
+      'verified',
+      'leadershipTeam'
     ];
 
     const updates = {};
@@ -124,6 +156,17 @@ const updateProfile = async_handler(async (req, res) => {
       // allow 'description' to update 'aboutus'
       if (k === 'description') updates.aboutus = req.body[k];
     });
+
+    if (req.body.aboutus) updates.aboutus = req.body.aboutus;
+    if (req.body.socialLinks) updates.socialLinks = req.body.socialLinks;
+
+    const legacySocialLinks = buildSocialLinks(undefined, req.body.linkedinUrl, req.body.twitterUrl, req.body.githubUrl);
+    if (legacySocialLinks) {
+      updates.socialLinks = { ...(updates.socialLinks || {}), ...legacySocialLinks };
+    }
+
+    const resolvedLocation = normalizeLocation(req.body.location, req.body.city, req.body.country);
+    if (resolvedLocation) updates.location = resolvedLocation;
 
     // support 'me' route
     if (req.params.id === 'me') {
