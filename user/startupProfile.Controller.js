@@ -120,6 +120,13 @@ const getProfileById = async_handler(async (req, res) => {
 
     const profile = await StartupProfile.findById(req.params.id).populate('userId', 'name email');
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
+
+    // Increment views if it's not the owner viewing their own profile
+    if (!req.user || req.user.id !== profile.userId.toString()) {
+      profile.views = (profile.views || 0) + 1;
+      await profile.save();
+    }
+
     return res.json({ success: true, data: profile });
   } catch (err) {
     console.error(err);

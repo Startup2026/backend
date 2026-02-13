@@ -46,7 +46,8 @@ const getUsers = async_handler(async (req, res) => {
 
 const getUserById = async_handler(async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const id = req.params.id === 'me' ? req.user.id : req.params.id;
+    const user = await User.findById(id).select('-password');
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
     return res.json({ success: true, data: user });
   } catch (err) {
@@ -57,11 +58,19 @@ const getUserById = async_handler(async (req, res) => {
 
 const updateUser = async_handler(async (req, res) => {
   try {
-    const updates = req.body;
+    const updates = { ...req.body };
+    const id = req.params.id === 'me' ? req.user.id : req.params.id;
+
     if (updates.password) {
       updates.password = await bcrypt.hash(updates.password, 10);
     }
-    const user = await User.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
+    
+    // Prevent role change via this route if needed, or allow for admin only
+    if (req.params.id === 'me' && updates.role) {
+      delete updates.role;
+    }
+
+    const user = await User.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
     const userObj = user.toObject();
     delete userObj.password;

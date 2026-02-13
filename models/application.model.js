@@ -26,6 +26,17 @@ const applicationSchema = new mongoose.Schema({
     ],
     default: "APPLIED"
   },
+  statusVisible: {
+    type: Boolean,
+    default: false
+  },
+  notifiedAt: {
+    type: Date
+  },
+  isNotified: {
+    type: Boolean,
+    default: false
+  },
   resumeUrl: {
     type: String,
     default: null

@@ -7,4 +7,10 @@ const token__middleware = require('../middleware/jwttoken.middleware');
 // Body: { subject, message, applicationIdList: ["id1","id2", ...] }
 router.post('/selections/notify', token__middleware, selectionController.sendSelectionNotification);
 
+// POST /shortlists/notify
+router.post('/shortlists/notify', token__middleware, selectionController.sendShortlistNotification);
+
+// POST /rejections/notify
+router.post('/rejections/notify', token__middleware, selectionController.sendRejectionNotification);
+
 module.exports = router;

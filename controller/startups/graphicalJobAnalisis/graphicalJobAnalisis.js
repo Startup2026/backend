@@ -3,11 +3,20 @@ const async_handler = require("express-async-handler");
 const mongoose = require('mongoose');
 const Application = require("../../../models/application.model");
 const StudentProfile = require("../../../models/studentprofile.model");
+const StartupProfile = require("../../../models/startupprofile.model");
+const Job = require("../../../models/job.model");
 
 /**
  * Application day-wise trend (last N days)
  */
 const summary = async_handler(async (req, res) => {
+  const userId = req.user.id || req.user._id;
+  const startup = await StartupProfile.findOne({ userId });
+  if (!startup) return res.status(404).json({ success: false, error: "Startup not found" });
+
+  const jobs = await Job.find({ startupId: startup._id }).select("_id");
+  const jobIds = jobs.map(j => j._id);
+
   const N = 7;
   const now = new Date();
   const startDate = new Date();
@@ -15,7 +24,7 @@ const summary = async_handler(async (req, res) => {
   startDate.setHours(0, 0, 0, 0);
 
   const result = await Application.aggregate([
-    { $match: { createdAt: { $gte: startDate } } },
+    { $match: { jobId: { $in: jobIds }, createdAt: { $gte: startDate } } },
     {
       $group: {
         _id: { day: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } } },

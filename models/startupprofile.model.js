@@ -116,8 +116,8 @@ const startupSchema = new mongoose.Schema(
     },
     leadershipTeam: [{
       user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
+        type: String,
+        trim: true
       },
       role: String
     }],
@@ -126,6 +126,10 @@ const startupSchema = new mongoose.Schema(
       content: String,
       date: Date
     }],
+    views: {
+      type: Number,
+      default: 0
+    },
     verified: {
       type: Boolean,
       default: false

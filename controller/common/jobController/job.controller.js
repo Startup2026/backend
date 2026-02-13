@@ -16,6 +16,7 @@ exports.createJob = asyncHandler(async (req, res) => {
     openings,
     deadline,
     jobType,
+    location,
     Tag
   } = req.body;
 
@@ -40,6 +41,7 @@ exports.createJob = asyncHandler(async (req, res) => {
     openings,
     deadline,
     jobType,
+    location,
     Tag: Array.isArray(Tag) ? Tag : []
   });
 

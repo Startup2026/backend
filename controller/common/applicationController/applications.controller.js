@@ -1,17 +1,50 @@
 const async_handler = require("express-async-handler");
 const Application = require("../../../models/application.model");
 const Job = require("../../../models/job.model");
+const StudentProfile = require("../../../models/studentprofile.model");
+const Notification = require("../../../models/notification.model");
+// REMOVED Mailjet
+const nodemailer = require('nodemailer'); // Replaced Mailjet with Nodemailer
+const mongoose = require("mongoose");
 const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
+const { createAndSendNotification } = require("../../../utils/notificationHelper");
+
+// Configure Nodemailer
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.MJ_SENDER_EMAIL,
+      pass: process.env.EMAIL_PASS || 'your_password'
+    }
+});
 
 const createApplication = async_handler(async (req, res) => {
-    const { jobId, studentId } = req.params;
+    const { jobId, studentId } = req.params; // studentId here is likely userId from frontend
     // Check if resume file was uploaded
     const resumeFile = req.files && req.files['resume'] ? req.files['resume'][0] : null;
 
-    console.log(`Processing application for Job: ${jobId}, Student: ${studentId}`);
+    console.log(`Processing application for Job: ${jobId}, User/Student: ${studentId}`);
+
+    // Resolve Student Profile ID from User ID if needed
+    // The frontend sends user._id, but the Application model expects StudentProfile _id
+    let profileId = studentId;
+    const studentProfile = await StudentProfile.findOne({ userId: studentId });
+    if (studentProfile) {
+        profileId = studentProfile._id;
+    } else {
+        // Fallback: check if the ID passed IS the profile ID
+        const profileById = await StudentProfile.findById(studentId);
+        if (profileById) {
+            profileId = profileById._id;
+        } else {
+            // Profile doesn't exist for this user?
+            console.warn(`Student Profile not found for ID: ${studentId}`);
+            // Proceeding might fail population later, but we'll try
+        }
+    }
 
     let atsScore = 0;
     let applicationStatus = "APPLIED";
@@ -76,17 +109,43 @@ const createApplication = async_handler(async (req, res) => {
 
     // 3. Save Application
     // Construct resume URL (relative path for serving)
-    const resumeUrl = resumeFile ? `/media/${resumeFile.filename}` : null;
+    let finalResumeUrl = resumeFile ? `/media/${resumeFile.filename}` : null;
+    
+    // If no new resume uploaded, use the one from student profile
+    if (!finalResumeUrl && studentProfile && studentProfile.resumeUrl) {
+        finalResumeUrl = studentProfile.resumeUrl;
+    }
 
     const newApplication = new Application({ 
         atsScore, 
         status: applicationStatus, 
         jobId, 
-        studentId, 
-        resumeUrl: resumeUrl
+        studentId: profileId, 
+        resumeUrl: finalResumeUrl
     });
     
     await newApplication.save();
+
+    // Notify Startup about new application
+    try {
+        const fullJob = await Job.findById(jobId).populate({
+            path: 'startupId',
+            populate: { path: 'userId' }
+        });
+        if (fullJob && fullJob.startupId && fullJob.startupId.userId) {
+            const student = await StudentProfile.findById(profileId);
+            const studentName = student ? `${student.firstName} ${student.lastName}` : "A student";
+            await createAndSendNotification(
+                fullJob.startupId.userId._id,
+                "New Application Received",
+                `${studentName} has applied for the ${fullJob.role} position.`,
+                'info',
+                newApplication._id
+            );
+        }
+    } catch (notifErr) {
+        console.error("Failed to notify startup:", notifErr);
+    }
 
     return res.status(201).json({
         success: true,
@@ -97,7 +156,7 @@ const createApplication = async_handler(async (req, res) => {
 
 const getAllApplications = async_handler(async (req, res) => {
     const allApplications = await Application.find()
-        .populate('studentId', 'firstname lastname')
+        .populate('studentId')
         .populate('jobId');
     return res.status(200).json({
         success: true,
@@ -125,10 +184,28 @@ const getApplication = async_handler(async (req, res) => {
 });
 
 const getStudentApplications = async_handler(async (req, res) => {
-    const { studentId } = req.params;
+    const { studentId } = req.params; // This is actually userId from frontend
+    
+    // Resolve StudentProfile from userId
+    let profileId = studentId;
+    const studentProfile = await StudentProfile.findOne({ userId: studentId });
+    if (studentProfile) {
+        profileId = studentProfile._id;
+    } else {
+        // Maybe it's already a profile ID
+        const profileById = await StudentProfile.findById(studentId);
+        if (profileById) {
+            profileId = profileById._id;
+        } else {
+            return res.status(404).json({
+                success: false,
+                error: 'Student profile not found'
+            });
+        }
+    }
     
     // Find all applications for this student and populate job + startup details
-    const applications = await Application.find({ studentId })
+    const applications = await Application.find({ studentId: profileId })
         .populate({
             path: 'jobId',
             select: 'role jobType location salary stipend',
@@ -147,9 +224,15 @@ const getStudentApplications = async_handler(async (req, res) => {
 
 const updateApplication = async_handler(async (req, res) => {
     const applicationId = req.params.applicationId;
+    const { status } = req.body;
 
     const application = await Application.findByIdAndUpdate(applicationId, req.body, {
         new: true, runValidators: true
+    })
+    .populate('studentId')
+    .populate({
+        path: 'jobId',
+        populate: { path: 'startupId' }
     });
 
     if (!application) {
@@ -157,6 +240,87 @@ const updateApplication = async_handler(async (req, res) => {
             success: false,
             error: 'Application not found'
         });
+    }
+
+    // Send Notifications if status changed
+    if (status && ['SHORTLISTED', 'REJECTED', 'SELECTED', 'INTERVIEW_SCHEDULED', 'HIRED'].includes(status)) {
+        const student = application.studentId;
+        const job = application.jobId;
+        const startup = job.startupId;
+
+        if (student && student.email) {
+            let subject = `Update on your application for ${job.role}`;
+            let message = "";
+            let emailBody = "";
+
+            switch (status) {
+                case 'SHORTLISTED':
+                    message = `Great news! You have been shortlisted for the ${job.role} position at ${startup.startupName}.`;
+                    emailBody = `<p>Hi ${student.firstName},</p><p>${message}</p><p>We will contact you shortly for the next steps.</p>`;
+                    break;
+                case 'REJECTED':
+                    message = `Update regarding your application for ${job.role} at ${startup.startupName}.`;
+                    emailBody = `<p>Hi ${student.firstName},</p><p>Thank you for your interest in the ${job.role} position. Unfortunately, we have decided to move forward with other candidates at this time.</p>`;
+                    break;
+                case 'INTERVIEW_SCHEDULED':
+                    message = `You have an interview invited for ${job.role} at ${startup.startupName}!`;
+                    emailBody = `<p>Hi ${student.firstName},</p><p>We are excited to invite you for an interview for the ${job.role} position.</p><p>Please check your dashboard for details.</p>`;
+                    break;
+                case 'HIRED':
+                case 'SELECTED':
+                    message = `Congratulations! You have been selected for the ${job.role} position at ${startup.startupName}!`;
+                    emailBody = `<p>Hi ${student.firstName},</p><p>We are thrilled to offer you the position!</p><p>Please check your email for the official offer letter or next steps.</p>`;
+                    break;
+            }
+
+            // Send Platform Notification
+            if (student.userId) {
+                try {
+                    await createAndSendNotification(
+                        student.userId,
+                        subject,
+                        message,
+                        'application_update',
+                        application._id
+                    );
+                } catch (notifErr) {
+                    console.error("Failed to create notification:", notifErr);
+                }
+            }
+
+            // Send Email
+            try {
+                // If deep populated above in updateApplication, we can get startup email
+                // application.jobId.startupId is populated above
+                let companyName = startup ? startup.startupName : "Startup Portal";
+                let companyEmail = null;
+                
+                // We need to fetch the startup user email if not available
+                // startup (from application.jobId.startupId) might not have userId populated deeply in simple populate
+                // Re-fetch startup with deep populate for email
+                if (startup && startup._id) {
+                     const StartupProfile = require("../../../models/startupprofile.model");
+                     const startupDetails = await StartupProfile.findById(startup._id).populate('userId', 'email');
+                     if (startupDetails && startupDetails.userId) {
+                         companyEmail = startupDetails.userId.email;
+                     }
+                }
+
+                const mailOptions = {
+                    from: `"${companyName}" <${process.env.MJ_SENDER_EMAIL}>`,
+                    to: student.email,
+                    replyTo: companyEmail,
+                    subject: subject,
+                    html: emailBody
+                };
+
+                await transporter.sendMail(mailOptions);
+
+                console.log(`Email sent to ${student.email} for status ${status}`);
+            } catch (err) {
+                console.error("Failed to send email:", err);
+            }
+        }
     }
 
     return res.status(200).json({
@@ -184,7 +348,24 @@ const deleteApplication = async_handler(async (req, res) => {
     });
 });
 
+const getJobApplicants = async_handler(async (req, res) => {
+    const { jobId } = req.params;
+
+    const applications = await Application.find({ jobId })
+        .populate({
+            path: 'studentId',
+            select: 'firstName lastName email profilepic skills education experience resumeUrl' // Added resumeUrl
+        })
+        .sort({ atsScore: -1 });
+
+    return res.status(200).json({
+        success: true,
+        count: applications.length,
+        data: applications
+    });
+});
+
 module.exports = {
-    createApplication, getAllApplications, getApplication, getStudentApplications, updateApplication, deleteApplication
+    createApplication, getAllApplications, getApplication, getStudentApplications, updateApplication, deleteApplication, getJobApplicants
 };
 

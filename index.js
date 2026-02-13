@@ -2,6 +2,7 @@
 
 const express = require("express");
 const dotenv = require("dotenv");
+dotenv.config(); // Load env vars before OTHER imports
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const cors = require("cors");
@@ -22,16 +23,23 @@ const selectionsRouter=require("./router/selections.routes.js");
 const saveJobRouter=require("./router/saveJob.routes.js");
 const savPostRouter=require("./router/savePost.routes.js");
 const notificationRouter=require("./router/notifications.routes.js");
+const emailsRouter=require("./router/emails.routes.js");
+const analyticsRouter = require("./router/analytics.routes.js");
 const recommendationRouter=require("./router/recommendations.routes.js")
 const mongoose = require("mongoose");
+const http = require("http");
+const { initSocket } = require("./config/socket");
 const review=require("./router/review.routes.js")
-dotenv.config();
+
 connectDB();
 
 const app = express();
+const server = http.createServer(app);
 
 // Allow requests from your React frontend with credentials (cookies)
 const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:5173','https://wostup.netlify.app'];
+const io = initSocket(server, allowedOrigins);
+
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (curl, mobile apps, etc.)
@@ -39,10 +47,18 @@ app.use(cors({
     if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
     return callback(new Error('CORS policy: origin not allowed'));
   },
+// ... rest of cors config
   credentials: true, // allow cookies/tokens
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept']
 }));
+
+// Add io to req for convenience (optional, or use getIo in controllers)
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -69,6 +85,8 @@ app.use("/api", startupProfileRouter);
 app.use("/api", saveJobRouter);
 app.use("/api", savPostRouter);
 app.use("/api", notificationRouter);
+app.use("/api", emailsRouter);
+app.use("/api/analytics", analyticsRouter);
 app.use("/api", review);
 // Mount recommendations router under /api/recommendations
 // so routes like '/cold-start/jobs' become '/api/recommendations/cold-start/jobs'
@@ -79,7 +97,7 @@ const isProduction = process.env.NODE_ENV === "production";
 
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server listening on port ${port}`);
 });
 

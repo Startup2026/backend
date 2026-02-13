@@ -28,4 +28,7 @@ router.put('/applications/:applicationId', token__middleware, applicationControl
 // Delete application
 router.delete('/applications/:applicationId', token__middleware, applicationController.deleteApplication);
 
+// Get all applications for a specific job (Startup view)
+router.get('/applications/job/:jobId', token__middleware, applicationController.getJobApplicants);
+
 module.exports = router;

@@ -14,6 +14,8 @@ router.post('/auth/logout', logout);
 
 // Users CRUD (protected)
 router.get('/users', token__middleware, getUsers);
+router.get('/users/me', token__middleware, (req, res, next) => { req.params.id = 'me'; next(); }, getUserById);
+router.put('/users/me', token__middleware, (req, res, next) => { req.params.id = 'me'; next(); }, updateUser);
 router.get('/users/:id', token__middleware, getUserById);
 router.put('/users/:id', token__middleware, updateUser);
 router.delete('/users/:id', token__middleware, deleteUser);

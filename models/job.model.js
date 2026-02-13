@@ -33,8 +33,12 @@ const jobSchema = new mongoose.Schema({
   },
   jobType:{
     type:String,
-    enum:["Remote","Hybrid","Offline"],
+    enum:["Remote","Hybrid","Offline", "Full-Time", "Internship", "Contract"],
     required:true
+  },
+  location: {
+    type: String,
+    default: "Remote"
   },
   Tag:{
     type:[String],
