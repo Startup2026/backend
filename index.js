@@ -31,7 +31,9 @@ const http = require("http");
 const { initSocket } = require("./config/socket");
 const review=require("./router/review.routes.js")
 
-connectDB();
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -97,7 +99,11 @@ const isProduction = process.env.NODE_ENV === "production";
 
 
 const port = process.env.PORT || 3000;
-server.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
+if (require.main === module) {
+  server.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
+
+module.exports = { app, server, io };
 
