@@ -5,20 +5,14 @@ const Application = require("../../../models/application.model");
 const Notification = require("../../../models/notification.model");
 const Interview = require("../../../models/interview.model");
 const { getIo } = require("../../../config/socket");
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.MJ_SENDER_EMAIL,
-    pass: process.env.EMAIL_PASS || "your_password",
-  },
-});
+const { sendEmail } = require("../../../utils/emailHelper");
+const { createAndSendNotification } = require("../../../utils/notificationHelper");
 
 const sendBulkEmail = async_handler(async (req, res) => {
   const { subject, message, applicationIdList, isInterview, interviewDetails } = req.body;
   
-  if (!process.env.MJ_SENDER_EMAIL || !process.env.EMAIL_PASS) {
-      console.error("EMAIL CONFIG MISSING: MJ_SENDER_EMAIL or EMAIL_PASS is not set.");
+  if (!process.env.brevo_api) {
+      console.error("EMAIL CONFIG MISSING: brevo_api is not set.");
   }
 
   console.log(`[BulkEmail] Attempting to send to ${applicationIdList?.length || 0} applicants`);
@@ -86,17 +80,14 @@ const sendBulkEmail = async_handler(async (req, res) => {
     let emailSent = false;
     let emailError = null;
     try {
-      const mailOptions = {
-        from: `"${companyName}" <${process.env.MJ_SENDER_EMAIL}>`,
+      await sendEmail({
         to: recipient,
+        fromName: companyName,
         replyTo: companyEmail || undefined,
         subject,
         html: emailHTML,
-        text: message,
-      };
-
-      console.log(`[BulkEmail] Sending email to ${recipient} (App ID: ${applicationId})`);
-      await transporter.sendMail(mailOptions);
+        text: message
+      });
       console.log(`[BulkEmail] Email sent successfully to ${recipient}`);
       emailSent = true;
     } catch (err) {

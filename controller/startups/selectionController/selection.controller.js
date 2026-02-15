@@ -1,20 +1,10 @@
 const async_handler = require('express-async-handler');
 const mongoose = require('mongoose');
-const nodemailer = require('nodemailer');
 const Application = require('../../../models/application.model');
 const Notification = require('../../../models/notification.model');
 const { getIo } = require('../../../config/socket');
 const { createAndSendNotification } = require('../../../utils/notificationHelper');
-
-// Use nodemailer from existing config or create new transporter
-// Usually configured with environment variables
-const transporter = nodemailer.createTransport({
-  service: 'gmail', // or your SMTP provider
-  auth: {
-    user: process.env.MJ_SENDER_EMAIL, // Assuming this env var holds email
-    pass: process.env.EMAIL_PASS || 'your_password' // User needs to set this
-  }
-});
+const { sendEmail } = require('../../../utils/emailHelper');
 
 const sendSelectionNotification = async_handler(async (req, res) => {
   const { subject, message, applicationIdList } = req.body;
@@ -32,7 +22,7 @@ const sendSelectionNotification = async_handler(async (req, res) => {
     }
 
     const application = await Application.findById(applicationId)
-      .populate('studentId', 'email firstName lastName')
+      .populate('studentId', 'email firstName lastName userId')
       .populate({ 
         path: 'jobId', 
         populate: { 
@@ -69,17 +59,14 @@ const sendSelectionNotification = async_handler(async (req, res) => {
     `;
 
     try {
-      const mailOptions = {
-        from: `"${companyName}" <${process.env.MJ_SENDER_EMAIL}>`, // Sends from verified platform email
-        // to: recipient,
-        to:"sanchitskumbhar@gmail.com",
-        replyTo: "sanchitskumbhar@gmail.com", // Replies go to startup email
+      await sendEmail({
+        to: recipient,
+        fromName: companyName,
+        replyTo: companyEmail,
         subject: emailSubject,
         html: emailHTML,
         text: message || `Congratulations! You have been selected for ${jobTitle}.`
-      };
-
-      await transporter.sendMail(mailOptions);
+      });
       
       // Update DB Status + statusVisible
       application.status = 'SELECTED';
@@ -88,30 +75,29 @@ const sendSelectionNotification = async_handler(async (req, res) => {
       application.isNotified = true;
       await application.save();
 
-      // Create Notification
-      const notification = await Notification.create({
-        recipient: student._id,
-        title: "Offer Letter",
-        message: `Congratulations! You have been selected for the role ${jobTitle} at ${companyName}.`,
-        type: 'application_update', 
-        relatedId: applicationId
-      });
-
-      // Emit Socket Event
-      try {
+      // Create Notification & Emit Socket Event
+      if (student.userId) {
+        try {
+          await createAndSendNotification(
+            student.userId,
+            "Offer Letter",
+            `Congratulations! You have been selected for the role ${jobTitle} at ${companyName}.`,
+            'application_update', 
+            applicationId
+          );
+          
+          // Emit Standardized status update
           const io = getIo();
-          io.to(student._id.toString()).emit('notification', notification);
-          // Standardized event name
-          io.to(student._id.toString()).emit("applicationStatusUpdated", { 
+          io.to(student.userId.toString()).emit("applicationStatusUpdated", { 
             applicationId, 
             status: 'SELECTED',
             jobId: job._id,
             jobRole: jobTitle,
             company: companyName 
           });
-          io.to(student._id.toString()).emit('statusUpdate', { applicationId, status: 'SELECTED' });
-      } catch(socketErr) {
-          console.error("Socket emit failed", socketErr);
+        } catch(err) {
+            console.error("Selection notification/socket failed", err);
+        }
       }
 
       results.sent.push({ applicationId, email: recipient });
@@ -139,7 +125,7 @@ const sendShortlistNotification = async_handler(async (req, res) => {
     }
 
     const application = await Application.findById(applicationId)
-      .populate('studentId', 'email firstName lastName')
+      .populate('studentId', 'email firstName lastName userId')
       .populate({ 
         path: 'jobId', 
         populate: { 
@@ -177,16 +163,14 @@ const sendShortlistNotification = async_handler(async (req, res) => {
     `;
 
     try {
-        const mailOptions = {
-          from: `"${companyName}" <${process.env.MJ_SENDER_EMAIL}>`,
+        await sendEmail({
           to: recipient,
+          fromName: companyName,
           replyTo: companyEmail,
           subject: emailSubject,
           html: emailHTML,
           text: message || `You where shortlisted for ${jobTitle}.`
-        };
-
-        await transporter.sendMail(mailOptions);
+        });
       
       // Update Status + statusVisible
       application.status = 'SHORTLISTED';
@@ -195,28 +179,27 @@ const sendShortlistNotification = async_handler(async (req, res) => {
       application.isNotified = true;
       await application.save();
 
-      // Create Notification
-      const notification = await Notification.create({
-        recipient: student._id,
-        title: "Application Shortlisted",
-        message: `You have been shortlisted for the role ${jobTitle} at ${companyName}.`,
-        type: 'application_update',
-        relatedId: applicationId
-      });
-
-      // Emit Socket
-      try {
-        const io = getIo();
-        io.to(student._id.toString()).emit('notification', notification);
-        io.to(student._id.toString()).emit("applicationStatusUpdated", { 
-            applicationId, 
-            status: 'SHORTLISTED',
-            jobId: job._id,
-            jobRole: jobTitle,
-            company: companyName 
-        });
-        io.to(student._id.toString()).emit('statusUpdate', { applicationId, status: 'SHORTLISTED' });
-      } catch(socketErr) { console.error(socketErr); }
+      // Create Notification & Emit Socket
+      if (student.userId) {
+        try {
+          await createAndSendNotification(
+            student.userId,
+            "Application Shortlisted",
+            `You have been shortlisted for the role ${jobTitle} at ${companyName}.`,
+            'application_update',
+            applicationId
+          );
+          
+          const io = getIo();
+          io.to(student.userId.toString()).emit("applicationStatusUpdated", { 
+              applicationId, 
+              status: 'SHORTLISTED',
+              jobId: job._id,
+              jobRole: jobTitle,
+              company: companyName 
+          });
+        } catch(err) { console.error("Shortlist notification failed", err); }
+      }
 
       results.sent.push({ applicationId, email: recipient });
     } catch (err) {
@@ -243,7 +226,7 @@ const sendRejectionNotification = async_handler(async (req, res) => {
     }
 
     const application = await Application.findById(applicationId)
-      .populate('studentId', 'email firstName lastName')
+      .populate('studentId', 'email firstName lastName userId')
       .populate({ 
         path: 'jobId', 
         populate: { 
@@ -281,16 +264,14 @@ const sendRejectionNotification = async_handler(async (req, res) => {
       `;
 
       try {
-        const mailOptions = {
-          from: `"${companyName}" <${process.env.MJ_SENDER_EMAIL}>`,
+        await sendEmail({
           to: recipient,
+          fromName: companyName,
           replyTo: companyEmail,
           subject: emailSubject,
           html: emailHTML,
           text: message || `Update for ${jobTitle}.`
-        };
-
-        await transporter.sendMail(mailOptions);
+        });
 
        // Update Status + statusVisible
        application.status = 'REJECTED';
@@ -299,28 +280,27 @@ const sendRejectionNotification = async_handler(async (req, res) => {
       application.isNotified = true;
       await application.save();
 
-      // Create Notification
-      const notification = await Notification.create({
-        recipient: student._id,
-        title: "Application Status Update",
-        message: `Update regarding your application for ${jobTitle} at ${companyName}.`,
-        type: 'application_update',
-        relatedId: applicationId
-      });
-
-      // Emit Socket
-      try {
-        const io = getIo();
-        io.to(student._id.toString()).emit('notification', notification);
-        io.to(student._id.toString()).emit("applicationStatusUpdated", { 
-            applicationId, 
-            status: 'REJECTED',
-            jobId: job._id,
-            jobRole: jobTitle,
-            company: companyName 
-        });
-        io.to(student._id.toString()).emit('statusUpdate', { applicationId, status: 'REJECTED' });
-      } catch(socketErr) { console.error(socketErr); }
+      // Create Notification & Emit Socket
+      if (student.userId) {
+        try {
+          await createAndSendNotification(
+            student.userId,
+            "Application Status Update",
+            `Update regarding your application for ${jobTitle} at ${companyName}.`,
+            'application_update',
+            applicationId
+          );
+          
+          const io = getIo();
+          io.to(student.userId.toString()).emit("applicationStatusUpdated", { 
+              applicationId, 
+              status: 'REJECTED',
+              jobId: job._id,
+              jobRole: jobTitle,
+              company: companyName 
+          });
+        } catch(err) { console.error("Rejection notification failed", err); }
+      }
 
       results.sent.push({ applicationId, email: recipient });
     } catch (err) {

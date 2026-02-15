@@ -111,18 +111,25 @@ const getProfiles = async_handler(async (req, res) => {
 
 const getProfileById = async_handler(async (req, res) => {
   try {
+    let profile;
     // support 'me' shortcut
     if (req.params.id === 'me') {
-      const profile = await StartupProfile.findOne({ userId: req.user.id }).populate('userId', 'name email');
-      if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
-      return res.json({ success: true, data: profile });
+      profile = await StartupProfile.findOne({ userId: req.user.id }).populate('userId', 'name email');
+    } else {
+      profile = await StartupProfile.findById(req.params.id).populate('userId', 'name email');
     }
 
-    const profile = await StartupProfile.findById(req.params.id).populate('userId', 'name email');
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
 
+    // Handle subscription expiration
+    if (profile.subscriptionStatus !== "EXPIRED" && profile.subscriptionEndDate && new Date() > profile.subscriptionEndDate) {
+      profile.subscriptionStatus = "EXPIRED";
+      profile.subscriptionPlan = "FREE";
+      await profile.save();
+    }
+
     // Increment views if it's not the owner viewing their own profile
-    if (!req.user || req.user.id !== profile.userId.toString()) {
+    if (req.params.id !== 'me' && (!req.user || req.user.id !== profile.userId?._id?.toString())) {
       profile.views = (profile.views || 0) + 1;
       await profile.save();
     }
@@ -208,10 +215,61 @@ const deleteProfile = async_handler(async (req, res) => {
   }
 });
 
+const selectPlan = async_handler(async (req, res) => {
+  const { plan } = req.body;
+  if (!plan) return res.status(400).json({ success: false, error: 'Plan name is required' });
+  
+  const validPlans = ['FREE', 'GROWTH', 'PRO', 'ENTERPRISE'];
+  const upperPlan = plan.toUpperCase();
+  
+  if (!validPlans.includes(upperPlan)) {
+    return res.status(400).json({ success: false, error: 'Invalid plan selected' });
+  }
+
+  try {
+    const profile = await StartupProfile.findOne({ userId: req.user.id });
+    if (!profile) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Profile not found. Please create profile first.',
+        code: 'PROFILE_NOT_FOUND'
+      });
+    }
+
+    profile.subscriptionPlan = upperPlan;
+    profile.subscriptionStatus = 'ACTIVE';
+    
+    // Set 30-day expiry for paid plans
+    if (upperPlan !== 'FREE') {
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + 30);
+      profile.subscriptionEndDate = expiry;
+    } else {
+      profile.subscriptionEndDate = null;
+    }
+
+    await profile.save();
+
+    return res.json({ 
+      success: true, 
+      message: `Successfully switched to ${upperPlan} plan`,
+      data: {
+        plan: profile.subscriptionPlan,
+        status: profile.subscriptionStatus,
+        expiry: profile.subscriptionEndDate
+      } 
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, error: 'Server error while selecting plan' });
+  }
+});
+
 module.exports = {
   createProfile,
   getProfiles,
   getProfileById,
   updateProfile,
-  deleteProfile
+  deleteProfile,
+  selectPlan
 };

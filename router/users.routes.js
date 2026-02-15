@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { createUser, getUsers, getUserById, updateUser, deleteUser } = require('../user/user.Controller');
+const { createUser, getUsers, getUserById, updateUser, deleteUser, verifyEmail, resendVerification } = require('../user/user.Controller');
 const { loginUser, logout } = require('../user/auth.Controller');
 const { createProfile: createStudentProfile, getProfiles: getStudentProfiles, getProfileById: getStudentProfileById, updateProfile: updateStudentProfile, deleteProfile: deleteStudentProfile } = require('../user/studentProfile.Controller');
 
@@ -11,6 +11,8 @@ const token__middleware = require('../middleware/jwttoken.middleware');
 router.post('/auth/signup', createUser);
 router.post('/auth/login', loginUser);
 router.post('/auth/logout', logout);
+router.post('/auth/verify-email', verifyEmail);
+router.post('/auth/resend-verification', resendVerification);
 
 // Users CRUD (protected)
 router.get('/users', token__middleware, getUsers);

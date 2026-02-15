@@ -44,7 +44,10 @@ const getHiringAnalytics = async_handler(async (req, res) => {
                 topSkills: [],
                 conversionRate: 0,
                 experienceDistribution: [],
-                educationDistribution: []
+                educationDistribution: [],
+                interviewedCount: 0,
+                rejectedCount: 0,
+                pendingCount: 0
             }
         });
     }
@@ -77,7 +80,7 @@ const getHiringAnalytics = async_handler(async (req, res) => {
         { $sort: { "_id": 1 } }
     ]);
 
-    // C. Experience Distribution (Assuming experience is stored in studentProfile)
+    // C. Experience Distribution
     const experienceStats = await Application.aggregate([
         { $match: { jobId: { $in: jobIds } } },
         {
@@ -152,6 +155,18 @@ const getHiringAnalytics = async_handler(async (req, res) => {
         jobId: { $in: jobIds }, 
         status: { $in: ["SELECTED", "HIRED"] } 
     });
+
+    const interviewedCount = await Application.countDocuments({
+        jobId: { $in: jobIds },
+        status: "INTERVIEW_SCHEDULED"
+    });
+
+    const rejectedCount = await Application.countDocuments({
+        jobId: { $in: jobIds },
+        status: "REJECTED"
+    });
+
+    const pendingCount = totalApplications - (interviewedCount + rejectedCount + totalSelected);
     
     const conversionRate = totalApplications > 0 ? (totalSelected / totalApplications) * 100 : 0;
 
@@ -159,6 +174,9 @@ const getHiringAnalytics = async_handler(async (req, res) => {
         success: true,
         data: {
             totalApplications,
+            interviewedCount,
+            rejectedCount,
+            pendingCount,
             statusDistribution: statusStats.map(s => ({ status: s._id, count: s.count })),
             applicationsOverTime: timeStats.map(t => ({ date: t._id, count: t.count })),
             topSkills: skillsStats.map(s => ({ skill: s._id, count: s.count })),
@@ -170,6 +188,103 @@ const getHiringAnalytics = async_handler(async (req, res) => {
 
 });
 
+/**
+ * GET /api/analytics/hiring/advanced
+ * Provides deeper statistical metrics for Pro/Enterprise plans.
+ */
+const getAdvancedHiringAnalytics = async_handler(async (req, res) => {
+    const userId = req.user.id;
+    const startup = await StartupProfile.findOne({ userId });
+    if (!startup) return res.status(404).json({ success: false, error: "Startup not found" });
+
+    const jobs = await Job.find({ startupId: startup._id }).select('_id');
+    const jobIds = jobs.map(j => j._id);
+
+    if (jobIds.length === 0) {
+        return res.json({ success: true, data: { timeToHire: 0, velocityByStage: [], skillSuccessRates: [] } });
+    }
+
+    // 1. Time to Selection (Hiring Velocity)
+    const selectionTimes = await Application.aggregate([
+        { 
+            $match: { 
+                jobId: { $in: jobIds }, 
+                status: "SELECTED" 
+            } 
+        },
+        {
+            $project: {
+                timeToSelect: { 
+                    $divide: [
+                        { $subtract: ["$updatedAt", "$createdAt"] },
+                        1000 * 60 * 60 * 24 // Convert to days
+                    ]
+                }
+            }
+        },
+        {
+            $group: {
+                _id: null,
+                avgDays: { $avg: "$timeToSelect" }
+            }
+        }
+    ]);
+
+    // 2. Yield by Skill (Success rate per skill)
+    const skillYield = await Application.aggregate([
+        { $match: { jobId: { $in: jobIds } } },
+        {
+            $lookup: {
+                from: "studentprofiles",
+                localField: "studentId",
+                foreignField: "_id",
+                as: "student"
+            }
+        },
+        { $unwind: "$student" },
+        { $unwind: "$student.skills" },
+        {
+            $group: {
+                _id: "$student.skills",
+                total: { $sum: 1 },
+                hired: { 
+                    $sum: { 
+                        $cond: [{ $eq: ["$status", "SELECTED"] }, 1, 0] 
+                    }
+                }
+            }
+        },
+        { $sort: { hired: -1, total: -1 } },
+        { $limit: 10 }
+    ]);
+
+    // 3. Estimated Velocity by Stage (Static progression weights for absence of history)
+    // We'll simulate this by looking at distribution ratios
+    const totalApps = await Application.countDocuments({ jobId: { $in: jobIds } });
+    const shortlistedApps = await Application.countDocuments({ jobId: { $in: jobIds }, status: { $ne: "APPLIED" } });
+    const interviewedApps = await Application.countDocuments({ jobId: { $in: jobIds }, status: { $in: ["INTERVIEW_SCHEDULED", "SELECTED"] } });
+
+    const velocity = [
+        { phase: "Screening", days: shortlistedApps > 0 ? (totalApps / shortlistedApps).toFixed(1) : 0 },
+        { phase: "Interviewing", days: interviewedApps > 0 ? (shortlistedApps / interviewedApps).toFixed(1) : 0 },
+        { phase: "Selection", days: selectionTimes[0]?.avgDays?.toFixed(1) || 0 }
+    ];
+
+    res.json({
+        success: true,
+        data: {
+            avgTimeToSelect: selectionTimes[0]?.avgDays?.toFixed(1) || 0,
+            skillSuccessRates: skillYield.map(s => ({
+                skill: s._id,
+                rate: s.total > 0 ? Math.round((s.hired / s.total) * 100) : 0,
+                count: s.total
+            })),
+            velocityByStage: velocity
+        }
+    });
+});
+
 module.exports = {
-    getHiringAnalytics
+    getHiringAnalytics,
+    getAdvancedHiringAnalytics
 };

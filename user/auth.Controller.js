@@ -13,6 +13,10 @@ const loginUser = async_handler(async (req, res) => {
   const match = await bcrypt.compare(password, user.password);
   if (!match) return res.status(401).json({ success: false, error: 'Invalid credentials' });
 
+  if (!user.isVerified) {
+    return res.status(403).json({ success: false, error: 'Please verify your email address before logging in.', needsVerification: true });
+  }
+
   const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '30d' });
 
   // Set cookie (optional) and return token
@@ -21,7 +25,26 @@ const loginUser = async_handler(async (req, res) => {
   const userObj = user.toObject();
   delete userObj.password;
 
-  return res.json({ success: true, data: { user: userObj, token } });
+  // For startups, check if profile exists
+  let onboardingStep = 'completed';
+  if (user.role === 'startup') {
+    const StartupProfile = require('../models/startupprofile.model');
+    const profile = await StartupProfile.findOne({ userId: user._id });
+    if (!profile) {
+      onboardingStep = 'profile';
+    } else if (!profile.subscriptionPlan) {
+      onboardingStep = 'plan';
+    }
+  }
+
+  return res.json({ 
+    success: true, 
+    data: { 
+      user: userObj, 
+      token,
+      onboardingStep 
+    } 
+  });
 });
 
 const logout = async_handler(async (req, res) => {

@@ -9,38 +9,38 @@ const async_handler = require("express-async-handler");
 const createPost = async_handler(async (req, res) => {
   try {
     const {
-      startupid,
       title,
       description,
-      media
     } = req.body;
 
-    if (!startupid) {
-      return res.status(400).json({
+    // Use req.user.id to find the startup profile
+    if (!req.user || req.user.role !== 'STARTUP') {
+      return res.status(403).json({
         success: false,
-        error: 'startupid is required'
+        error: 'Only startups are allowed to create posts'
       });
     }
 
-    // Check if user exists
-    const user = await StartupModel.findById(startupid);
-    if (!user) {
+    const startup = await StartupModel.findOne({ userId: req.user.id });
+    if (!startup) {
       return res.status(404).json({
         success: false,
-        error: 'startup not found'
+        error: 'Startup profile not found for this user'
       });
     }
 
-    // // Check role
-    // if (user.role !== "STARTUP") {
-    //   return res.status(403).json({
-    //     success: false,
-    //     error: 'Only startups are allowed to create posts'
-    //   });
-    // }
+    const media = {};
+    if (req.files) {
+      if (req.files['image'] && req.files['image'][0]) {
+        media.photo = `/media/${req.files['image'][0].filename}`;
+      }
+      if (req.files['video'] && req.files['video'][0]) {
+        media.video = `/media/${req.files['video'][0].filename}`;
+      }
+    }
 
     const post = new Post({
-      startupid,
+      startupid: startup._id,
       title,
       description,
       media
@@ -66,7 +66,37 @@ const createPost = async_handler(async (req, res) => {
 const getPosts = async_handler(async (req, res) => {
   try {
     const posts = await Post.find()
-      .populate('startupid', 'name email role')
+      .populate('startupid', 'startupName email role profilepic')
+      .sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      data: posts
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+/**
+ * GET STARTUP POSTS (FOR ANALYSIS)
+ */
+const getStartupPosts = async_handler(async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'STARTUP') {
+      return res.status(403).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const startup = await StartupModel.findOne({ userId: req.user.id });
+    if (!startup) {
+      return res.status(404).json({ success: false, error: 'Startup profile not found' });
+    }
+
+    const posts = await Post.find({ startupid: startup._id })
       .sort({ createdAt: -1 });
 
     return res.json({
@@ -172,6 +202,7 @@ const updatePost = async_handler(async (req, res) => {
 module.exports = {
   createPost,
   getPosts,
+  getStartupPosts,
   getPostById,
   updatePost,
   deletePost

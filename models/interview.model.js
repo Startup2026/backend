@@ -6,6 +6,11 @@ const interviewSchema = new mongoose.Schema({
     ref: "Application",
     required: true
   },
+  startupId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "StartupProfile",
+    required: true
+  },
   scheduleDate: Date, // Legacy support if needed
   interviewDate: String, // Storing as string or Date based on controller
   interviewTime: String,

@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const userSchema = new mongoose.Schema({
+const pendingUserSchema = new mongoose.Schema({
   username: {
     type: String,
     required: true
@@ -14,22 +14,22 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
-    minlength: 6
+    required: true
   },
   role: {
     type: String,
     enum: ["student", "startup", "admin"],
     required: true
   },
-  isVerified: {
-    type: Boolean,
-    default: true // Users in this collection are now verified by default
+  otp: {
+    type: String,
+    required: true
   },
-  profileCompleted: {
-    type: Boolean,
-    default: false
+  expiresAt: {
+    type: Date,
+    required: true,
+    index: { expires: 0 } // Document expires at the time specified in expiresAt
   }
 }, { timestamps: true });
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model("PendingUser", pendingUserSchema);

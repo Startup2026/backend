@@ -3,18 +3,9 @@ const InterviewSchedule = require("../../../models/interview.model");
 const Application = require("../../../models/application.model");
 const StudentProfile = require("../../../models/studentprofile.model");
 const StartupProfile = require("../../../models/startupprofile.model");
-const nodemailer = require('nodemailer');
 const { getIo } = require("../../../config/socket");
-const Notification = require("../../../models/notification.model");
-
-// Configure Nodemailer
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.MJ_SENDER_EMAIL,
-      pass: process.env.EMAIL_PASS || 'your_password'
-    }
-});
+const { createAndSendNotification } = require("../../../utils/notificationHelper");
+const { sendEmail } = require("../../../utils/emailHelper");
 
 async function sendMailToApplicantsForInterview(doc) {
     try {
@@ -22,7 +13,7 @@ async function sendMailToApplicantsForInterview(doc) {
         const appIds = Array.isArray(doc.applicationId) ? doc.applicationId : [doc.applicationId];
         for (const appId of appIds) {
             if (!appId) continue;
-            const application = await Application.findById(appId).populate('studentId', 'email firstName lastName');
+            const application = await Application.findById(appId).populate('studentId', 'email firstName lastName userId');
             if (!application) {
                 console.info(`Application ${appId} not found, skipping.`);
                 continue;
@@ -81,15 +72,14 @@ async function sendMailToApplicantsForInterview(doc) {
                 `${companyName}`
             ].join("\n");
 
-            const mailOptions = {
-                from: `"${companyName}" <${process.env.MJ_SENDER_EMAIL}>`,
+            await sendEmail({
                 to: to,
+                fromName: companyName,
                 replyTo: companyEmail || undefined, 
                 subject: subject,
-                text: text
-            };
-
-            await transporter.sendMail(mailOptions);
+                text: text,
+                html: text.replace(/\n/g, '<br>') // Simple conversion for HTML
+            });
 
             // Update application status to INTERVIEW_SCHEDULED
             try {
@@ -100,27 +90,24 @@ async function sendMailToApplicantsForInterview(doc) {
                     isNotified: true
                 });
 
-                // Create Notification
-                const notification = await Notification.create({
-                    recipient: application.studentId._id,
-                    title: subject,
-                    message: "You have an interview invited! Check your email for details.",
-                    type: 'application_update',
-                    relatedId: appId
-                });
+                // Create Notification & Emit Socket via Helper
+                if (application.studentId && application.studentId.userId) {
+                    await createAndSendNotification(
+                        application.studentId.userId,
+                        subject,
+                        "You have an interview invited! Check your email for details.",
+                        'application_update',
+                        appId
+                    );
 
-                // Emit Socket
-                try {
-                    const io = getIo();
-                    if (io && application.studentId) {
-                        io.to(application.studentId._id.toString()).emit("applicationStatusUpdated", { 
+                    // Standardized event for UI refresh
+                    try {
+                        const io = getIo();
+                        io.to(application.studentId.userId.toString()).emit("applicationStatusUpdated", { 
                             applicationId: appId, 
                             status: 'INTERVIEW_SCHEDULED' 
                         });
-                        io.to(application.studentId._id.toString()).emit("notification", notification);
-                    }
-                } catch (socketErr) {
-                    console.error("Socket emit failed", socketErr);
+                    } catch (ioErr) { console.warn(ioErr); }
                 }
 
             } catch (updateErr) {
@@ -144,17 +131,36 @@ const scheduleInterview = async_handler(async (req, res) => {
     } = req.body;
     const { applicationId } = req.params;
     
+    // Check if startup already exists on request (from plan middleware)
+    let startupId = req.startupProfile ? req.startupProfile._id : null;
+    
+    if (!startupId) {
+        const startup = await StartupProfile.findOne({ userId: req.user.id });
+        if (!startup) return res.status(404).json({ success: false, error: "Startup profile not found" });
+        startupId = startup._id;
+    }
+
     // Update Application status
     await Application.findByIdAndUpdate(applicationId, { 
         status: "INTERVIEW_SCHEDULED",
         statusVisible: false 
     });
 
-    const newInterviewSchedule = new InterviewSchedule({ interviewDate, interviewTime, mode, interviewLink, interviewer, notes, applicationId });
+    const newInterviewSchedule = new InterviewSchedule({ 
+        interviewDate, 
+        interviewTime, 
+        mode, 
+        interviewLink, 
+        interviewer, 
+        notes, 
+        applicationId,
+        startupId 
+    });
 
     await newInterviewSchedule.save();
     return res.status(200).json({
-        "message": "Interview Scheduled!!!"
+        success: true,
+        message: "Interview Scheduled!!!"
     })
 });
 
@@ -242,9 +248,50 @@ const updateInterviewStatus = async_handler(async (req, res) => {
     });
 });
 
+const respondToInterview = async_handler(async (req, res) => {
+    const { id } = req.params; 
+    const { action } = req.body; // 'accept' or 'decline'
+    
+    const interview = await InterviewSchedule.findById(id).populate({
+        path: 'startupId',
+        populate: { path: 'userId' }
+    }).populate({
+        path: 'applicationId',
+        populate: [
+            { path: 'studentId' },
+            { path: 'jobId' }
+        ]
+    });
+
+    if (!interview) return res.status(404).json({ success: false, error: "Interview not found" });
+
+    // Validate ownership
+    if (interview.applicationId?.studentId?.userId?.toString() !== req.user.id) {
+        return res.status(403).json({ success: false, error: "Unauthorized response" });
+    }
+
+    interview.status = action === 'accept' ? 'accepted' : 'declined';
+    await interview.save();
+
+    // Notify Startup
+    if (interview.startupId && interview.startupId.userId) {
+        const studentName = `${interview.applicationId.studentId.firstName} ${interview.applicationId.studentId.lastName}`;
+        await createAndSendNotification(
+            interview.startupId.userId._id,
+            `Interview Invite ${action === 'accept' ? 'Accepted' : 'Declined'}`,
+            `${studentName} has ${action}ed the interview request for ${interview.applicationId.jobId?.role}.`,
+            action === 'accept' ? 'success' : 'warning',
+            interview.applicationId._id
+        );
+    }
+
+    res.status(200).json({ success: true, message: `Response registered: ${action}` });
+});
+
 module.exports = {
     scheduleInterview,
     getInterviews,
     rescheduleInterview,
-    updateInterviewStatus
+    updateInterviewStatus,
+    respondToInterview
 };

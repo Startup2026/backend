@@ -3,23 +3,13 @@ const Application = require("../../../models/application.model");
 const Job = require("../../../models/job.model");
 const StudentProfile = require("../../../models/studentprofile.model");
 const Notification = require("../../../models/notification.model");
-// REMOVED Mailjet
-const nodemailer = require('nodemailer'); // Replaced Mailjet with Nodemailer
 const mongoose = require("mongoose");
 const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
 const { createAndSendNotification } = require("../../../utils/notificationHelper");
-
-// Configure Nodemailer
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.MJ_SENDER_EMAIL,
-      pass: process.env.EMAIL_PASS || 'your_password'
-    }
-});
+const { sendEmail } = require("../../../utils/emailHelper");
 
 const createApplication = async_handler(async (req, res) => {
     const { jobId, studentId } = req.params; // studentId here is likely userId from frontend
@@ -306,15 +296,13 @@ const updateApplication = async_handler(async (req, res) => {
                      }
                 }
 
-                const mailOptions = {
-                    from: `"${companyName}" <${process.env.MJ_SENDER_EMAIL}>`,
+                await sendEmail({
                     to: student.email,
+                    fromName: companyName,
                     replyTo: companyEmail,
                     subject: subject,
                     html: emailBody
-                };
-
-                await transporter.sendMail(mailOptions);
+                });
 
                 console.log(`Email sent to ${student.email} for status ${status}`);
             } catch (err) {
@@ -333,13 +321,40 @@ const updateApplication = async_handler(async (req, res) => {
 const deleteApplication = async_handler(async (req, res) => {
     const applicationId = req.params.applicationId;
 
-    const application = await Application.findByIdAndDelete(applicationId);
+    // Fetch before delete to get details for notification
+    const application = await Application.findById(applicationId).populate({
+        path: 'jobId',
+        populate: { path: 'startupId', populate: { path: 'userId' } }
+    }).populate('studentId');
 
     if (!application) {
         return res.status(404).json({
             success: false,
             error: 'Application not found'
         });
+    }
+
+    // Role check: only student can delete their own application, or startup for their job?
+    // For now, let's assume it's the student withdrawing
+    const student = application.studentId;
+    const job = application.jobId;
+    const startup = job ? job.startupId : null;
+
+    await Application.findByIdAndDelete(applicationId);
+
+    // Notify Startup about withdrawal
+    if (startup && startup.userId && req.user.role === 'STUDENT') {
+        try {
+            await createAndSendNotification(
+                startup.userId._id,
+                "Application Withdrawn",
+                `${student.firstName} ${student.lastName} has withdrawn their application for the ${job.role} position.`,
+                'warning',
+                null
+            );
+        } catch (notifErr) {
+            console.error("Failed to notify startup of withdrawal:", notifErr);
+        }
     }
 
     return res.status(200).json({
@@ -351,7 +366,14 @@ const deleteApplication = async_handler(async (req, res) => {
 const getJobApplicants = async_handler(async (req, res) => {
     const { jobId } = req.params;
 
-    const applications = await Application.find({ jobId })
+    let query = Application.find({ jobId });
+
+    // Apply applicant limit if on FREE plan
+    if (req.planFeatures && req.planFeatures.applicantLimit !== Infinity) {
+        query = query.limit(req.planFeatures.applicantLimit);
+    }
+
+    const applications = await query
         .populate({
             path: 'studentId',
             select: 'firstName lastName email profilepic skills education experience resumeUrl' // Added resumeUrl
@@ -361,6 +383,7 @@ const getJobApplicants = async_handler(async (req, res) => {
     return res.status(200).json({
         success: true,
         count: applications.length,
+        limitApplied: req.planFeatures ? req.planFeatures.applicantLimit : null,
         data: applications
     });
 });

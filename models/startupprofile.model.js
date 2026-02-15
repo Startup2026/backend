@@ -130,6 +130,19 @@ const startupSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
+    subscriptionPlan: {
+      type: String,
+      enum: ["FREE", "GROWTH", "PRO", "ENTERPRISE"],
+      default: "FREE"
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ["ACTIVE", "TRIAL", "EXPIRED"],
+      default: "ACTIVE"
+    },
+    subscriptionEndDate: {
+      type: Date
+    },
     verified: {
       type: Boolean,
       default: false

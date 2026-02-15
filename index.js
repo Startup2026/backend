@@ -79,7 +79,7 @@ app.use("/api", jobsRouter);
 app.use("/api", jobSummaryRouter);
 app.use("/api", mainSummaryRouter);
 app.use("/api", myJobApplicationsRouter);
-app.use("/api", postsRouter);
+app.use("/api/posts", postsRouter);
 app.use("/api", selectionsRouter);
 app.use("/api", startupProfileRouter);
 app.use("/api", saveJobRouter);

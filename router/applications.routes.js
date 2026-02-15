@@ -3,6 +3,7 @@ const router = express.Router();
 const applicationController = require('../controller/common/applicationController/applications.controller');
 const token__middleware = require('../middleware/jwttoken.middleware');
 const uploads = require('../middleware/fileuploads.middleware');
+const { checkPlanAccess } = require('../middleware/plan.middleware');
 
 // Create application (jobId and studentId in params)
 // POST /applications/:jobId/:studentId
@@ -29,6 +30,6 @@ router.put('/applications/:applicationId', token__middleware, applicationControl
 router.delete('/applications/:applicationId', token__middleware, applicationController.deleteApplication);
 
 // Get all applications for a specific job (Startup view)
-router.get('/applications/job/:jobId', token__middleware, applicationController.getJobApplicants);
+router.get('/applications/job/:jobId', token__middleware, checkPlanAccess(), applicationController.getJobApplicants);
 
 module.exports = router;

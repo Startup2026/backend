@@ -1,6 +1,8 @@
 const Job = require("../../../models/job.model");
 const StartupProfile = require("../../../models/startupprofile.model");
+const Application = require("../../../models/application.model");
 const asyncHandler = require("express-async-handler");
+const { createAndSendNotification } = require("../../../utils/notificationHelper");
 
 // CREATE JOB
 exports.createJob = asyncHandler(async (req, res) => {
@@ -109,6 +111,32 @@ exports.updateJob = asyncHandler(async (req, res) => {
 
 // DELETE JOB
 exports.deleteJob = asyncHandler(async (req, res) => {
-  await Job.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
+  const jobId = req.params.id;
+  const job = await Job.findById(jobId).populate('startupId');
+  
+  if (!job) return res.status(404).json({ success: false, error: "Job not found" });
+
+  // Notify all applicants before deleting (or after, but we need data)
+  const applications = await Application.find({ jobId }).populate({
+      path: 'studentId'
+  });
+
+  for (const app of applications) {
+      if (app.studentId && app.studentId.userId) {
+          try {
+              await createAndSendNotification(
+                  app.studentId.userId,
+                  "Job Posting Removed",
+                  `The job role "${job.role}" at ${job.startupId?.startupName || 'a startup'} has been removed. Your application is no longer active.`,
+                  'warning'
+              );
+          } catch (err) { console.error(err); }
+      }
+  }
+
+  // Optional: Clean up applications? Or keep them? Usually clean up.
+  await Application.deleteMany({ jobId });
+  await Job.findByIdAndDelete(jobId);
+
+  res.json({ success: true, message: "Job and associated applications deleted" });
 });
