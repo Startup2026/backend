@@ -176,26 +176,16 @@ const getApplication = async_handler(async (req, res) => {
 const getStudentApplications = async_handler(async (req, res) => {
     const { studentId } = req.params; // This is actually userId from frontend
     
+    let queryIds = [studentId];
+    
     // Resolve StudentProfile from userId
-    let profileId = studentId;
     const studentProfile = await StudentProfile.findOne({ userId: studentId });
     if (studentProfile) {
-        profileId = studentProfile._id;
-    } else {
-        // Maybe it's already a profile ID
-        const profileById = await StudentProfile.findById(studentId);
-        if (profileById) {
-            profileId = profileById._id;
-        } else {
-            return res.status(404).json({
-                success: false,
-                error: 'Student profile not found'
-            });
-        }
-    }
+        queryIds.push(studentProfile._id);
+    } 
     
     // Find all applications for this student and populate job + startup details
-    const applications = await Application.find({ studentId: profileId })
+    const applications = await Application.find({ studentId: { $in: queryIds } })
         .populate({
             path: 'jobId',
             select: 'role jobType location salary stipend',
