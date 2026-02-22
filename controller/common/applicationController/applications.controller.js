@@ -223,83 +223,28 @@ const updateApplication = async_handler(async (req, res) => {
     }
 
     // Send Notifications if status changed
+    // NOTE: We do NOT send email here anymore.
+    // The email sending is now handled by the Bulk Email controller or specific "Notify" actions.
+    // This endpoint only updates the status in the database.
+    // However, if the frontend explicitly requests a notification (e.g. via query param or body), we could support it.
+    // For now, based on requirements, we disable the automatic email here so that dashboard status changes are silent.
+    
+    /* 
     if (status && ['SHORTLISTED', 'REJECTED', 'SELECTED', 'INTERVIEW_SCHEDULED', 'HIRED'].includes(status)) {
+        // ... (Email logic removed/commented out) ...
+    }
+    */
+    // const startup = job.startupId; 
+
+    /* 
+    if (status && ['SHORTLISTED', 'REJECTED', 'SELECTED', 'INTERVIEW_SCHEDULED', 'HIRED'].includes(status)) {
+        // ... (Email logic removed/commented out) ...
         const student = application.studentId;
         const job = application.jobId;
-        const startup = job.startupId;
 
-        if (student && student.email) {
-            let subject = `Update on your application for ${job.role}`;
-            let message = "";
-            let emailBody = "";
-
-            switch (status) {
-                case 'SHORTLISTED':
-                    message = `Great news! You have been shortlisted for the ${job.role} position at ${startup.startupName}.`;
-                    emailBody = `<p>Hi ${student.firstName},</p><p>${message}</p><p>We will contact you shortly for the next steps.</p>`;
-                    break;
-                case 'REJECTED':
-                    message = `Update regarding your application for ${job.role} at ${startup.startupName}.`;
-                    emailBody = `<p>Hi ${student.firstName},</p><p>Thank you for your interest in the ${job.role} position. Unfortunately, we have decided to move forward with other candidates at this time.</p>`;
-                    break;
-                case 'INTERVIEW_SCHEDULED':
-                    message = `You have an interview invited for ${job.role} at ${startup.startupName}!`;
-                    emailBody = `<p>Hi ${student.firstName},</p><p>We are excited to invite you for an interview for the ${job.role} position.</p><p>Please check your dashboard for details.</p>`;
-                    break;
-                case 'HIRED':
-                case 'SELECTED':
-                    message = `Congratulations! You have been selected for the ${job.role} position at ${startup.startupName}!`;
-                    emailBody = `<p>Hi ${student.firstName},</p><p>We are thrilled to offer you the position!</p><p>Please check your email for the official offer letter or next steps.</p>`;
-                    break;
-            }
-
-            // Send Platform Notification
-            if (student.userId) {
-                try {
-                    await createAndSendNotification(
-                        student.userId,
-                        subject,
-                        message,
-                        'application_update',
-                        application._id
-                    );
-                } catch (notifErr) {
-                    console.error("Failed to create notification:", notifErr);
-                }
-            }
-
-            // Send Email
-            try {
-                // If deep populated above in updateApplication, we can get startup email
-                // application.jobId.startupId is populated above
-                let companyName = startup ? startup.startupName : "Startup Portal";
-                let companyEmail = null;
-                
-                // We need to fetch the startup user email if not available
-                // startup (from application.jobId.startupId) might not have userId populated deeply in simple populate
-                // Re-fetch startup with deep populate for email
-                if (startup && startup._id) {
-                     const StartupProfile = require("../../../models/startupprofile.model");
-                     const startupDetails = await StartupProfile.findById(startup._id).populate('userId', 'email');
-                     if (startupDetails && startupDetails.userId) {
-                         companyEmail = startupDetails.userId.email;
-                     }
-                }
-
-                await sendEmail({
-                    to: student.email,
-                    fromName: companyName,
-                    replyTo: companyEmail,
-                    subject: subject,
-                    html: emailBody
-                });
-
-                console.log(`Email sent to ${student.email} for status ${status}`);
-            } catch (err) {
-                console.error("Failed to send email:", err);
-            }
-        }
+        // ... notification logic was here ...
     }
+    */
 
     return res.status(200).json({
         success: true,

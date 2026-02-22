@@ -9,25 +9,24 @@ const { sendEmail } = require("../../../utils/emailHelper");
 const { createAndSendNotification } = require("../../../utils/notificationHelper");
 
 const sendBulkEmail = async_handler(async (req, res) => {
-  const { subject, message, applicationIdList, isInterview, interviewDetails } = req.body;
+  const { subject: customSubject, message: customMessage, applicationIdList, isInterview, interviewDetails, template } = req.body;
+  
+  // NOTE: If 'template' is provided, we use default subject/message for that template unless overridden.
+  // Supported templates: 'shortlisted', 'rejected', 'selected', 'interview'
   
   if (!process.env.brevo_api) {
       console.error("EMAIL CONFIG MISSING: brevo_api is not set.");
   }
-
-  console.log(`[BulkEmail] Attempting to send to ${applicationIdList?.length || 0} applicants`);
-
-  if (!subject || !message) {
-    return res.status(400).json({
-      success: false,
-      error: "subject and message are required",
-    });
+  
+  if (!applicationIdList || !Array.isArray(applicationIdList) || applicationIdList.length === 0) {
+     return res.status(400).json({ success: false, error: "applicationIdList must be a non-empty array" });
   }
 
-  if (!Array.isArray(applicationIdList) || applicationIdList.length === 0) {
+  // Pre-validate inputs if no template is used
+  if (!template && (!customSubject || customMessage === undefined)) {
     return res.status(400).json({
       success: false,
-      error: "applicationIdList must be a non-empty array",
+      error: "subject and message are required when no template is specified",
     });
   }
 
@@ -70,13 +69,87 @@ const sendBulkEmail = async_handler(async (req, res) => {
     const companyEmail =
       startupProfile && startupProfile.userId ? startupProfile.userId.email : null;
 
-    const emailHTML = `
-      <p>Hi ${student.firstName || "Candidate"},</p>
-      <p>${message}</p>
-      <p>Regards,<br/>${companyName}</p>
-    `;
+    let emailSubject = customSubject || subject; // default to passed subject if it exists
+    let emailText = customMessage || message;     // default to passed message if it exists
+    let emailHTML = "";
 
-    // 1. Try to send Email
+    if (template) {
+        switch(template.toLowerCase()) {
+            case 'shortlisted':
+                emailSubject = emailSubject || `Great News! You are shortlisted for ${jobTitle} at ${companyName}`;
+                emailText = emailText || `Hi ${student.firstName},\n\nYou have been shortlisted for the ${jobTitle} position at ${companyName}. We will be in touch shortly regarding next steps.\n\nBest,\n${companyName}`;
+                emailHTML = `
+                    <p>Hi ${student.firstName || "Candidate"},</p>
+                    <p>We are pleased to inform you that you have been <strong>SHORTLISTED</strong> for the <strong>${jobTitle}</strong> position.</p>
+                    ${customMessage ? `<p>${customMessage}</p>` : `<p>We were impressed with your profile and application.</p>`}
+                    <p>We will contact you shortly with further instructions.</p>
+                    <p>Best Regards,<br/>${companyName}</p>
+                `;
+                // Also update application status if needed
+                application.status = "SHORTLISTED";
+                break;
+                
+            case 'rejected':
+                emailSubject = emailSubject || `Update on your application for ${jobTitle} at ${companyName}`;
+                emailText = emailText || `Hi ${student.firstName},\n\nThank you for your interest. Unfortunately, we will not be moving forward with your application for ${jobTitle} at this time.\n\nBest,\n${companyName}`;
+                emailHTML = `
+                    <p>Hi ${student.firstName || "Candidate"},</p>
+                    <p>Thank you for applying to the <strong>${jobTitle}</strong> position at ${companyName}.</p>
+                    ${customMessage ? `<p>${customMessage}</p>` : `<p>After careful consideration, we have decided to pursue other candidates whose qualifications more closely align with our current needs.</p>`}
+                    <p>We wish you the best in your job search.</p>
+                    <p>Best Regards,<br/>${companyName}</p>
+                `;
+                application.status = "REJECTED";
+                break;
+                
+            case 'selected':
+                emailSubject = emailSubject || `Congratulations! You are selected for ${jobTitle} at ${companyName}`;
+                emailText = emailText || `Hi ${student.firstName},\n\nCongratulations! We are thrilled to offer you the ${jobTitle} position at ${companyName}.\n\nBest,\n${companyName}`;
+                emailHTML = `
+                    <p>Hi ${student.firstName || "Candidate"},</p>
+                    <p><strong>Congratulations!</strong></p>
+                    <p>We are thrilled to offer you the position of <strong>${jobTitle}</strong> at ${companyName}.</p>
+                    ${customMessage ? `<p>${customMessage}</p>` : `<p>Your skills and experience impressed our team.</p>`}
+                    <p>Please check your email for the official offer letter or next steps.</p>
+                    <p>Welcome aboard!</p>
+                    <p>Best Regards,<br/>${companyName}</p>
+                `;
+                application.status = "SELECTED";
+                break;
+
+            case 'interview':
+                emailSubject = emailSubject || `Interview Invitation: ${jobTitle} at ${companyName}`;
+                emailText = emailText || `Hi ${student.firstName},\n\nWe would like to invite you for an interview for the ${jobTitle} position.\n\nBest,\n${companyName}`;
+                emailHTML = `
+                    <p>Hi ${student.firstName || "Candidate"},</p>
+                    <p>We are excited to invite you to an interview for the <strong>${jobTitle}</strong> position.</p>
+                    ${customMessage ? `<p>${customMessage}</p>` : `<p>Please see the details below or check your dashboard.</p>`}
+                    ${interviewDetails ? `<p><strong>Interview Details:</strong><br/>${interviewDetails}</p>` : ''}
+                    <p>Best Regards,<br/>${companyName}</p>
+                `;
+                application.status = "INTERVIEW_SCHEDULED";
+                break;
+                
+            default:
+                // Fallback for custom templates or unknown types
+                 emailHTML = `
+                  <p>Hi ${student.firstName || "Candidate"},</p>
+                  <p>${emailText}</p>
+                  <p>Regards,<br/>${companyName}</p>
+                `;
+                break;
+        }
+    } else {
+        // No template, use raw message
+         emailSubject = emailSubject || "Update from Startup";
+        emailHTML = `
+          <p>Hi ${student.firstName || "Candidate"},</p>
+          <p>${emailText}</p>
+          <p>Regards,<br/>${companyName}</p>
+        `;
+    }
+
+    // 1. Try to Send Email
     let emailSent = false;
     let emailError = null;
     try {
@@ -84,12 +157,44 @@ const sendBulkEmail = async_handler(async (req, res) => {
         to: recipient,
         fromName: companyName,
         replyTo: companyEmail || undefined,
-        subject,
+        subject: emailSubject,
         html: emailHTML,
-        text: message
+        text: emailText
       });
       console.log(`[BulkEmail] Email sent successfully to ${recipient}`);
       emailSent = true;
+      
+      // Update Notification Flags on Success
+      application.isNotified = true;
+      application.statusVisible = true;
+      application.notifiedAt = new Date();
+      await application.save();
+      
+      // Also send platform notification using helper if possible
+       try {
+            await createAndSendNotification(
+                student.userId,
+                emailSubject,
+                `New email from ${companyName}: ${emailSubject}`,
+                'application_update',
+                application._id
+             );
+             
+             // EMIT SOCKET EVENT FOR DASHBOARD UPDATE
+             const io = getIo();
+             io.to(student.userId.toString()).emit("applicationStatusUpdated", {
+                applicationId: application._id,
+                status: application.status,
+                jobId: job._id,
+                jobRole: jobTitle,
+                company: companyName,
+                isNotified: true,
+                statusVisible: true
+             });
+        } catch (notifErr) {
+            console.error("Failed to create notification or emit socket:", notifErr);
+        }
+
     } catch (err) {
       console.error(`[BulkEmail] Email failed for ${recipient}:`, err.message);
       emailError = err.message;

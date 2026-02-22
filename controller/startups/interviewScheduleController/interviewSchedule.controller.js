@@ -105,7 +105,9 @@ async function sendMailToApplicantsForInterview(doc) {
                         const io = getIo();
                         io.to(application.studentId.userId.toString()).emit("applicationStatusUpdated", { 
                             applicationId: appId, 
-                            status: 'INTERVIEW_SCHEDULED' 
+                            status: 'INTERVIEW_SCHEDULED',
+                            isNotified: true,
+                            statusVisible: true
                         });
                     } catch (ioErr) { console.warn(ioErr); }
                 }

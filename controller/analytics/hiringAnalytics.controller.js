@@ -166,6 +166,34 @@ const getHiringAnalytics = async_handler(async (req, res) => {
         status: "REJECTED"
     });
 
+    // G. Applications By Job
+    const appByJobStats = await Application.aggregate([
+        { $match: { jobId: { $in: jobIds } } },
+        {
+            $group: {
+                _id: "$jobId",
+                count: { $sum: 1 }
+            }
+        },
+        { $sort: { count: -1 } },
+        { $limit: 5 },
+        { 
+            $lookup: {
+                from: "jobs",
+                localField: "_id",
+                foreignField: "_id",
+                as: "job"
+            }
+        },
+        { $unwind: "$job" },
+        {
+            $project: {
+                role: "$job.role",
+                count: 1
+            }
+        }
+    ]);
+
     const pendingCount = totalApplications - (interviewedCount + rejectedCount + totalSelected);
     
     const conversionRate = totalApplications > 0 ? (totalSelected / totalApplications) * 100 : 0;
@@ -179,6 +207,7 @@ const getHiringAnalytics = async_handler(async (req, res) => {
             pendingCount,
             statusDistribution: statusStats.map(s => ({ status: s._id, count: s.count })),
             applicationsOverTime: timeStats.map(t => ({ date: t._id, count: t.count })),
+            applicationsByJob: appByJobStats.map(a => ({ jobId: a._id, role: a.role, count: a.count })),
             topSkills: skillsStats.map(s => ({ skill: s._id, count: s.count })),
             conversionRate: Math.round(conversionRate),
             experienceDistribution: formattedExperience,

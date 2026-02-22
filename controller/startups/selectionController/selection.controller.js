@@ -93,7 +93,9 @@ const sendSelectionNotification = async_handler(async (req, res) => {
             status: 'SELECTED',
             jobId: job._id,
             jobRole: jobTitle,
-            company: companyName 
+            company: companyName,
+            isNotified: true,
+            statusVisible: true
           });
         } catch(err) {
             console.error("Selection notification/socket failed", err);
@@ -196,7 +198,9 @@ const sendShortlistNotification = async_handler(async (req, res) => {
               status: 'SHORTLISTED',
               jobId: job._id,
               jobRole: jobTitle,
-              company: companyName 
+              company: companyName,
+              isNotified: true,
+              statusVisible: true
           });
         } catch(err) { console.error("Shortlist notification failed", err); }
       }
@@ -297,7 +301,9 @@ const sendRejectionNotification = async_handler(async (req, res) => {
               status: 'REJECTED',
               jobId: job._id,
               jobRole: jobTitle,
-              company: companyName 
+              company: companyName,
+              isNotified: true,
+              statusVisible: true
           });
         } catch(err) { console.error("Rejection notification failed", err); }
       }
