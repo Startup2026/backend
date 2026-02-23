@@ -61,7 +61,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.get("/", (req, res) => {
+  res.send("API is running...");
+}); 
+
+app.use(express.json({ limit: "50mb" }));
 app.use(cookieParser());
 
 // app.use((req, res, next) => {
@@ -70,7 +74,7 @@ app.use(cookieParser());
 //   next();
 // });
 
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/media", express.static(path.join(__dirname, "media")));
 // Mount all routers under /api so individual route paths defined in each router file map to `/api/<route>`
 app.use("/api", userRouter);

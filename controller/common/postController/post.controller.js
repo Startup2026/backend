@@ -14,7 +14,7 @@ const createPost = async_handler(async (req, res) => {
     } = req.body;
 
     // Use req.user.id to find the startup profile
-    if (!req.user || req.user.role !== 'STARTUP') {
+    if (!req.user || req.user.role !== 'startup') {
       return res.status(403).json({
         success: false,
         error: 'Only startups are allowed to create posts'
@@ -66,7 +66,10 @@ const createPost = async_handler(async (req, res) => {
 const getPosts = async_handler(async (req, res) => {
   try {
     const posts = await Post.find()
-      .populate('startupid', 'startupName email role profilepic')
+      .populate({
+        path: 'startupid',
+        select: 'startupName email role profilepic userId'
+      })
       .sort({ createdAt: -1 });
 
     return res.json({
@@ -87,7 +90,7 @@ const getPosts = async_handler(async (req, res) => {
  */
 const getStartupPosts = async_handler(async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'STARTUP') {
+    if (!req.user || req.user.role !== 'startup') {
       return res.status(403).json({ success: false, error: 'Unauthorized' });
     }
 
@@ -164,6 +167,15 @@ const deletePost = async_handler(async (req, res) => {
  */
 const updatePost = async_handler(async (req, res) => {
   try {
+    const post = await Post.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        error: 'Post not found'
+      });
+    }
+
     // Whitelist allowed fields
     const allowed = [
       'title',
@@ -172,19 +184,24 @@ const updatePost = async_handler(async (req, res) => {
       'likes'
     ];
 
-    const updates = {};
+    // Update allowed fields
     Object.keys(req.body || {}).forEach((k) => {
-      if (allowed.includes(k)) updates[k] = req.body[k];
+      if (allowed.includes(k)) post[k] = req.body[k];
     });
 
-    const post = await Post.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
-
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        error: 'Post not found'
-      });
+    // Handle File Uploads (Merge with existing)
+    if (req.files) {
+        if (!post.media) post.media = {};
+        
+        if (req.files['image'] && req.files['image'][0]) {
+            post.media.photo = `/media/${req.files['image'][0].filename}`;
+        }
+        if (req.files['video'] && req.files['video'][0]) {
+            post.media.video = `/media/${req.files['video'][0].filename}`;
+        }
     }
+    
+    await post.save();
 
     return res.json({
       success: true,

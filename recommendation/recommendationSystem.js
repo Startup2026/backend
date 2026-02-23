@@ -198,14 +198,15 @@ class RecommendationSystem {
       });
     }
 
+
     // 2. Fetch posts and populate comments
-const posts = await Post.find()
-    .populate("startupid", "startupName industry profilepic verified")
-    .populate({
-      path: "comments.user",
-      select: "username name avatar" // Explicitly add username here
-    })
-    .lean();
+    const posts = await Post.find()
+      .populate("startupid", "startupName industry profilepic verified userId")
+      .populate({
+        path: "comments.user",
+        select: "username name avatar" // Explicitly add username here
+      })
+      .lean();
 
     const scoredPosts = posts.map(post => {
       const freshness = this.calculateFreshnessScore(post.createdAt);
@@ -222,8 +223,7 @@ const posts = await Post.find()
       if (studentId && Array.isArray(post.likes)) {
         isLiked = post.likes.some(id => id.toString() === studentId.toString());
       }
-
-      // Check if user saved it
+      
       const isSaved = savedPostIds.has(post._id.toString());
 
       return {
@@ -241,7 +241,8 @@ const posts = await Post.find()
           _id: post.startupid?._id,
           startupName: post.startupid?.startupName || "Startup",
           profilepic: post.startupid?.profilepic,
-          verified: post.startupid?.verified
+          verified: post.startupid?.verified,
+          userId: post.startupid?.userId
         },
         scores: { final: Math.round(finalScore * 100) / 100 }
       };
