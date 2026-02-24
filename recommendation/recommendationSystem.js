@@ -68,7 +68,14 @@ class RecommendationSystem {
   }
 
   // ===================== JOB RECOMMENDATIONS =====================
-  async getJobRecommendations(studentId, limit = 10) {
+  async getJobRecommendations(studentId, page = 1, limit = 10) {
+    // Handling case where limit was passed as second arg in older calls
+    if (typeof page === 'number' && typeof limit === 'undefined' && page > 10) {
+        // This is likely the old signature (limit)
+        limit = page;
+        page = 1;
+    }
+
     const profile = await StudentProfile.findOne({ userId: studentId });
     // If no profile, return cold start jobs to prevent crash
     if (!profile) return this.getColdStartJobRecommendations(limit);
@@ -131,11 +138,21 @@ class RecommendationSystem {
     });
 
     scoredJobs.sort((a, b) => b.scores.final - a.scores.final);
-    return scoredJobs.slice(0, limit);
+    
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    return scoredJobs.slice(startIndex, endIndex);
   }
 
   // ===================== TRENDING JOBS (NEW) =====================
-  async getTrendingJobs(studentId, limit = 10) {
+  async getTrendingJobs(studentId, page = 1, limit = 10) {
+    // Handling signature mismatch
+    if (typeof page === 'number' && typeof limit === 'undefined' && page > 10) {
+        limit = page;
+        page = 1;
+    }
+
     // Trending focuses on high engagement (applications/likes) and urgency (deadline)
     const jobs = await Job.find()
       .populate("startupId", "startupName industry location")
@@ -183,11 +200,20 @@ class RecommendationSystem {
     });
 
     trendingJobs.sort((a, b) => b.scores.final - a.scores.final);
-    return trendingJobs.slice(0, limit);
+    
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    return trendingJobs.slice(startIndex, endIndex);
   }
 
   // ===================== POST RECOMMENDATIONS =====================
-  async getPostRecommendations(studentId, limit = 10) {
+  async getPostRecommendations(studentId, page = 1, limit = 10) {
+    // Handle old signature
+    if (typeof page === 'number' && typeof limit === 'undefined' && page > 10) {
+        limit = page;
+        page = 1;
+    }
 
     // 1. Fetch IDs of posts user has saved
     let savedPostIds = new Set();
@@ -249,13 +275,23 @@ class RecommendationSystem {
     });
 
     scoredPosts.sort((a, b) => b.scores.final - a.scores.final);
-    return scoredPosts.slice(0, limit);
+    
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    return scoredPosts.slice(startIndex, endIndex);
   }
 
   // ===================== STARTUP RECOMMENDATIONS (NEW) =====================
-  async getStartupRecommendations(studentId, limit = 10) {
+  async getStartupRecommendations(studentId, page = 1, limit = 10) {
+    // Handle old signature
+    if (typeof page === 'number' && typeof limit === 'undefined' && page > 10) {
+        limit = page;
+        page = 1;
+    }
+
     const profile = await StudentProfile.findOne({ userId: studentId });
-    if (!profile) return this.getColdStartStartupRecommendations(limit);
+    if (!profile) return this.getColdStartStartupRecommendations(page, limit);
 
     const startups = await StartupProfile.find().lean();
 
@@ -305,15 +341,20 @@ class RecommendationSystem {
     });
 
     scoredStartups.sort((a, b) => b.scores.final - a.scores.final);
-    return scoredStartups.slice(0, limit);
+    
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    return scoredStartups.slice(startIndex, endIndex);
   }
 
   // ===================== COLD START =====================
 
-  async getColdStartJobRecommendations(limit = 10) {
+  async getColdStartJobRecommendations(page = 1, limit = 10) {
     const jobs = await Job.find()
       .sort({ createdAt: -1 })
       .populate("startupId", "startupName industry location")
+      .skip((page - 1) * limit) // Native skip
       .limit(limit)
       .lean();
 
@@ -336,7 +377,7 @@ class RecommendationSystem {
     }));
   }
 
-  async getColdStartPostRecommendations(limit = 10) {
+  async getColdStartPostRecommendations(page=1, limit = 10) {
     const posts = await Post.find()
       .sort({ createdAt: -1 })
       .populate("startupid", "startupName industry profilepic verified")
@@ -344,6 +385,7 @@ class RecommendationSystem {
         path: "comments.user",
         select: "name avatar"
       })
+      .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
@@ -369,9 +411,10 @@ class RecommendationSystem {
   }
 
   // New: Cold Start for Startups
-  async getColdStartStartupRecommendations(limit = 10) {
+  async getColdStartStartupRecommendations(page=1, limit = 10) {
     const startups = await StartupProfile.find()
       .sort({ verified: -1, createdAt: -1 }) // Prioritize verified, then newest
+      .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
@@ -392,15 +435,21 @@ class RecommendationSystem {
   }
 
   // Wrapper for "Get Cold Start"
-  async getColdStartRecommendations(type, limit = 10) {
-    if (type === 'posts') {
-      return this.getColdStartPostRecommendations(limit);
-    } else if (type === 'startups') {
-      return this.getColdStartStartupRecommendations(limit);
-    } else if (type === 'trending-jobs') {
-      return this.getTrendingJobs(null, limit);
+  async getColdStartRecommendations(type, page = 1, limit = 10) {
+    // Handle old signature
+    if (typeof page === 'number' && typeof limit === 'undefined' && page > 10) {
+        limit = page;
+        page = 1;
     }
-    return this.getColdStartJobRecommendations(limit);
+
+    if (type === 'posts') {
+      return this.getColdStartPostRecommendations(page, limit);
+    } else if (type === 'startups') {
+      return this.getColdStartStartupRecommendations(page, limit);
+    } else if (type === 'trending-jobs') {
+      return this.getTrendingJobs(null, page, limit);
+    }
+    return this.getColdStartJobRecommendations(page, limit);
   }
 
   async getScoreExplanation(userId, contentId, type) {

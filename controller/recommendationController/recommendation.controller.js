@@ -28,6 +28,7 @@ class RecommendationController {
     try {
       const { studentId } = req.params;
       const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page) || 1;
       const randomize = req.query.random === 'true' || req.query.random === '1';
 
       if (!studentId) {
@@ -39,6 +40,7 @@ class RecommendationController {
 
       let recommendations = await recommendationSystem.getJobRecommendations(
         studentId,
+        page,
         limit
       );
 
@@ -72,9 +74,11 @@ class RecommendationController {
     try {
       const { studentId } = req.params; // studentId is optional for trending
       const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page) || 1;
 
       const recommendations = await recommendationSystem.getTrendingJobs(
         studentId === 'guest' ? null : studentId,
+        page,
         limit
       );
 
@@ -102,6 +106,7 @@ class RecommendationController {
     try {
       const { studentId } = req.params;
       const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page) || 1;
       const randomize = req.query.random === 'true' || req.query.random === '1';
 
       if (!studentId) {
@@ -113,6 +118,7 @@ class RecommendationController {
 
       let recommendations = await recommendationSystem.getPostRecommendations(
         studentId,
+        page,
         limit
       );
 
@@ -214,11 +220,12 @@ class RecommendationController {
 
   /**
    * Cold start recommendations for new users - JOBS
-   * GET /recommendations/cold-start/jobs?limit=10
+   * GET /recommendations/cold-start/jobs?limit=10&page=1
    */
   async getColdStartJobRecommendations(req, res) {
     try {
       const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page) || 1;
 
       if (limit < 1 || limit > 100) {
         return res.status(400).json({
@@ -227,7 +234,7 @@ class RecommendationController {
         });
       }
 
-      const recommendations = await recommendationSystem.getColdStartJobRecommendations(limit);
+      const recommendations = await recommendationSystem.getColdStartJobRecommendations(page, limit);
 
       res.status(200).json({
         success: true,
@@ -249,11 +256,12 @@ class RecommendationController {
 
   /**
    * Cold start recommendations for new users - POSTS
-   * GET /recommendations/cold-start/posts?limit=10
+   * GET /recommendations/cold-start/posts?limit=10&page=1
    */
   async getColdStartPostRecommendations(req, res) {
     try {
       const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page) || 1;
 
       if (limit < 1 || limit > 100) {
         return res.status(400).json({
@@ -262,7 +270,7 @@ class RecommendationController {
         });
       }
 
-      const recommendations = await recommendationSystem.getColdStartPostRecommendations(limit);
+      const recommendations = await recommendationSystem.getColdStartPostRecommendations(page, limit);
 
       res.status(200).json({
         success: true,
@@ -291,6 +299,7 @@ class RecommendationController {
     try {
       const contentType = req.query.type || 'jobs';
       const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page) || 1;
 
       const validTypes = ['jobs', 'posts', 'startups', 'trending-jobs'];
       if (!validTypes.includes(contentType)) {
@@ -309,6 +318,7 @@ class RecommendationController {
 
       const recommendations = await recommendationSystem.getColdStartRecommendations(
         contentType,
+        page,
         limit
       );
 
@@ -447,6 +457,7 @@ class RecommendationController {
   async getColdStartStartUpRecommendations(req, res) {
     try {
       const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page) || 1;
 
       if (limit < 1 || limit > 100) {
         return res.status(400).json({
@@ -455,7 +466,7 @@ class RecommendationController {
         });
       }
 
-      const recommendations = await recommendationSystem.getColdStartStartupRecommendations(limit);
+      const recommendations = await recommendationSystem.getColdStartStartupRecommendations(page, limit);
 
       res.status(200).json({
         success: true,
@@ -482,6 +493,7 @@ class RecommendationController {
     try {
       const { studentId } = req.params;
       const limit = parseInt(req.query.limit) || 10;
+      const page = parseInt(req.query.page) || 1;
       const randomize = req.query.random === 'true' || req.query.random === '1';
 
       if (!studentId) {
@@ -493,6 +505,7 @@ class RecommendationController {
 
       let recommendations = await recommendationSystem.getStartupRecommendations(
         studentId,
+        page,
         limit
       );
 
