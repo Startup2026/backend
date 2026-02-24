@@ -77,7 +77,7 @@ app.use(cookieParser());
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/media", express.static(path.join(__dirname, "media")));
 // Mount all routers under /api so individual route paths defined in each router file map to `/api/<route>`
-app.use("/api", userRouter);
+app.use("/api/users", userRouter);
 app.use("/api", applicationRouter);
 app.use("/api", graphicalRouter);
 app.use("/api", interviewsRouter);
