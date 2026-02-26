@@ -31,6 +31,7 @@ const mongoose = require("mongoose");
 const http = require("http");
 const { initSocket } = require("./config/socket");
 const review=require("./router/review.routes.js")
+const startupVerificationRouter = require("./router/startupVerification.routes.js")
 
 if (process.env.NODE_ENV !== 'test') {
   connectDB();
@@ -96,6 +97,7 @@ app.use("/api", notificationRouter);
 app.use("/api", emailsRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api", review);
+app.use("/api/startup-verification", startupVerificationRouter);
 // Mount recommendations router under /api/recommendations
 // so routes like '/cold-start/jobs' become '/api/recommendations/cold-start/jobs'
 app.use("/api/recommendations", recommendationRouter)
