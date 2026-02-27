@@ -55,9 +55,7 @@ const router = express.Router();
 const startupVerificationController = require('../controller/startupVerification.controller');
 const protect = require('../middleware/jwttoken.middleware');
 
-// OTP routes
-router.post('/send-otp', protect, startupVerificationController.sendOTP);
-router.post('/verify-otp', protect, startupVerificationController.verifyOTP);
+
 
 // Route to submit startup verification details
 router.post('/', protect, startupVerificationController.submitVerification);
