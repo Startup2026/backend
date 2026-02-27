@@ -17,6 +17,7 @@
     "node-mailjet": "^6.0.11",
     "nodemailer": "^7.0.12",
     "nodemon": "^3.1.10",
+    "razorpay": "^2.9.6",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "twilio": "^5.12.2"

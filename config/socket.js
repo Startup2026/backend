@@ -9,7 +9,8 @@ const initSocket = (server, allowedOrigins) => {
       origin: allowedOrigins,
       credentials: true,
       methods: ["GET", "POST"]
-    }
+    },
+    transports: ['websocket', 'polling'] // Allow both for better compatibility
   });
 
   io.on("connection", (socket) => {

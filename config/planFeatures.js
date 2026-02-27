@@ -1,5 +1,6 @@
 const PLAN_FEATURES = {
   FREE: {
+    amount:0,
     maxActiveJobs: 2,
     maxInterviewsPerMonth: 5,
     analytics: "basic",
@@ -9,6 +10,7 @@ const PLAN_FEATURES = {
     interviewCalendar: true, // Allow access to calendar, usage limit handles the rest
   },
   GROWTH: {
+    amount:5000,
     maxActiveJobs: 10,
     maxInterviewsPerMonth: 50,
     analytics: "advanced",
@@ -18,6 +20,7 @@ const PLAN_FEATURES = {
     interviewCalendar: true,
   },
   PRO: {
+    amount:8000,
     maxActiveJobs: 25,
     maxInterviewsPerMonth: 200,
     analytics: "full",
@@ -26,16 +29,16 @@ const PLAN_FEATURES = {
     socialRecruiter: true,
     interviewCalendar: true,
   },
-  ENTERPRISE: {
-    maxActiveJobs: Infinity,
-    maxInterviewsPerMonth: Infinity,
-    analytics: "custom",
-    bulkEmail: true,
-    jobAnalysis: "advanced",
-    socialRecruiter: true,
-    interviewCalendar: true,
-    prioritySupport: true,
-  }
+  // ENTERPRISE: {
+  //   maxActiveJobs: Infinity,
+  //   maxInterviewsPerMonth: Infinity,
+  //   analytics: "custom",
+  //   bulkEmail: true,
+  //   jobAnalysis: "advanced",
+  //   socialRecruiter: true,
+  //   interviewCalendar: true,
+  //   prioritySupport: true,
+  // }
 };
 
 module.exports = { PLAN_FEATURES };
