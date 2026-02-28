@@ -7,13 +7,35 @@ const { sendEmail } = require('../utils/emailHelper');
 
 const loginUser = async_handler(async (req, res) => {
   const { email, password } = req.body;
+  console.log('[LOGIN DEBUG] Login attempt for email:', email);
+  
   if (!email || !password) return res.status(400).json({ success: false, error: 'Email and password required' });
 
-  const user = await User.findOne({ email: email.toLowerCase() });
-  if (!user) return res.status(401).json({ success: false, error: 'Invalid credentials' });
 
+ 
+
+  const normalizedEmail = email.toLowerCase();
+  console.log('[LOGIN DEBUG] Searching for user with normalized email:', normalizedEmail);
+  
+  const user = await User.findOne({ email: normalizedEmail });
+  console.log('[LOGIN DEBUG] User found:', user ? 'YES' : 'NO');
+  
+  if (!user) {
+    console.log('[LOGIN DEBUG] No user found with email:', normalizedEmail);
+    return res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+
+  console.log('[LOGIN DEBUG] User found. Comparing passwords...');
   const match = await bcrypt.compare(password, user.password);
-  if (!match) return res.status(401).json({ success: false, error: 'Invalid credentials' });
+  console.log('[LOGIN DEBUG] Password match:', match ? 'YES' : 'NO');
+  
+
+ 
+
+  if (!match) {
+    console.log('[LOGIN DEBUG] Password does not match for user:', normalizedEmail);
+    return res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
 
   if (!user.isVerified) {
     return res.status(403).json({ success: false, error: 'Please verify your email address before logging in.', needsVerification: true });
@@ -27,16 +49,25 @@ const loginUser = async_handler(async (req, res) => {
   const userObj = user.toObject();
   delete userObj.password;
 
-  // For startups, check if profile exists
+  // For startups, check onboarding status
   let onboardingStep = 'completed';
   if (user.role === 'startup') {
-    const StartupProfile = require('../models/startupprofile.model');
-    const profile = await StartupProfile.findOne({ userId: user._id });
-    if (!profile) {
-      onboardingStep = 'profile';
-    } else if (!profile.subscriptionPlan) {
-      onboardingStep = 'plan';
+    const StartupVerification = require('../models/startupVerification.model');
+    const verification = await StartupVerification.findOne({ userId: user._id });
+
+    if (!verification || verification.status === 'pending') {
+      onboardingStep = 'startup-verification';
+    } else if (verification.status === 'rejected') {
+      onboardingStep = 'startup-verification'; // Or a specific "rejected" step
+    } else if (verification.status === 'approved') {
+      const StartupProfile = require('../models/startupprofile.model');
+      const profile = await StartupProfile.findOne({ userId: user._id });
+      if (!profile) {
+        onboardingStep = 'profile';
+      }
     }
+  } else if (user.role === 'student') {
+    // Handle student onboarding if necessary
   }
 
   return res.json({ 

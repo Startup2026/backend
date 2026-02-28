@@ -1,3 +1,145 @@
+// // ---------------- START SERVER ----------------
+
+// const express = require("express");
+// const dotenv = require("dotenv");
+// dotenv.config(); // Load env vars before OTHER imports
+// const bcrypt = require("bcrypt");
+// const jwt = require("jsonwebtoken");
+// const cors = require("cors");
+// const path = require("path");
+// const connectDB = require("./config/config");
+// const cookieParser = require("cookie-parser");
+// const applicationRouter=require("./router/applications.routes.js");
+// const startupProfileRouter=require("./router/startupProfile.routes.js");
+// const studentProfileRouter=require("./router/studentProfile.routes.js");
+// const userRouter=require("./router/users.routes.js");
+// const graphicalRouter=require("./router/graphical.routes.js");
+// const interviewsRouter=require("./router/interviews.routes.js");
+// const jobsRouter=require("./router/jobs.routes.js");
+// const jobSummaryRouter=require("./router/jobSummary.routes.js");
+// const mainSummaryRouter=require("./router/mainSummary.routes.js");
+// const myJobApplicationsRouter=require("./router/myJobApplications.routes.js");
+// const postsRouter=require("./router/posts.routes.js");
+// const selectionsRouter=require("./router/selections.routes.js");
+// const saveJobRouter=require("./router/saveJob.routes.js");
+// const savPostRouter=require("./router/savePost.routes.js");
+// const notificationRouter=require("./router/notifications.routes.js");
+// const emailsRouter=require("./router/emails.routes.js");
+// const analyticsRouter = require("./router/analytics.routes.js");
+// const recommendationRouter=require("./router/recommendations.routes.js")
+// const mongoose = require("mongoose");
+// const http = require("http");
+// const { initSocket } = require("./config/socket");
+// const review=require("./router/review.routes.js")
+// <<<<<<< HEAD
+// const startupVerificationRouter = require("./router/startupVerification.routes.js")
+// =======
+// const paymentRouter=require("./router/payment.route.js")
+// >>>>>>> d92941db4d675baec1d01810a6f588b16519549e
+
+// if (process.env.NODE_ENV !== 'test') {
+//   connectDB();
+// }
+
+// const app = express();
+// const server = http.createServer(app);
+
+// // Allow requests from your React frontend with credentials (cookies)
+// const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:5173','https://wostup.netlify.app','https://wostup.tech'];
+// const io = initSocket(server, allowedOrigins);
+
+// app.use(cors({
+//   origin: function (origin, callback) {
+//     // Allow requests with no origin (curl, mobile apps, etc.)
+//     if (!origin) return callback(null, true);
+//     if (allowedOrigins.indexOf(origin) !== -1) return callback(null, true);
+//     return callback(new Error('CORS policy: origin not allowed'));
+//   },
+// // ... rest of cors config
+//   credentials: true, // allow cookies/tokens
+//   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+//   allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept']
+// }));
+
+// // Add io to req for convenience (optional, or use getIo in controllers)
+// app.use((req, res, next) => {
+//   req.io = io;
+//   next();
+// });
+
+// app.get("/", (req, res) => {
+//   res.send("API is running...");
+// }); 
+
+// app.use(express.json({ limit: "50mb" }));
+// app.use(cookieParser());
+
+// // app.use((req, res, next) => {
+// //   console.log("Incoming cookies:", req.headers.cookie);
+// //   console.log("Parsed cookies:", req.cookies);
+// //   next();
+// // });
+
+// app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+// app.use("/media", express.static(path.join(__dirname, "media")));
+// // Mount all routers under /api so individual route paths defined in each router file map to `/api/<route>`
+// app.use("/api", userRouter);
+// app.use("/api", applicationRouter);
+// app.use("/api", graphicalRouter);
+// app.use("/api", interviewsRouter);
+// app.use("/api", jobsRouter);
+// app.use("/api", jobSummaryRouter);
+// app.use("/api", mainSummaryRouter);
+// app.use("/api", myJobApplicationsRouter);
+// app.use("/api/posts", postsRouter);
+// app.use("/api", selectionsRouter);
+// app.use("/api", startupProfileRouter);
+// app.use("/api", studentProfileRouter);
+// app.use("/api", saveJobRouter);
+// app.use("/api", savPostRouter);
+// app.use("/api", notificationRouter);
+// app.use("/api", emailsRouter);
+// app.use("/api/analytics", analyticsRouter);
+// app.use("/api", review);
+// <<<<<<< HEAD
+// app.use("/api/startup-verification", startupVerificationRouter);
+// =======
+// app.use("/api/payment", paymentRouter);
+// >>>>>>> d92941db4d675baec1d01810a6f588b16519549e
+// // Mount recommendations router under /api/recommendations
+// // so routes like '/cold-start/jobs' become '/api/recommendations/cold-start/jobs'
+// app.use("/api/recommendations", recommendationRouter)
+
+// const isProduction = process.env.NODE_ENV === "production";
+
+
+
+// const port = process.env.PORT || 3000;
+// if (require.main === module) {
+//   server.listen(port, () => {
+//     console.log(`Server listening on port ${port}`);
+//   });
+// }
+
+// module.exports = { app, server, io };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // ---------------- START SERVER ----------------
 
 const express = require("express");
@@ -31,7 +173,8 @@ const mongoose = require("mongoose");
 const http = require("http");
 const { initSocket } = require("./config/socket");
 const review=require("./router/review.routes.js")
-const paymentRouter=require("./router/payment.route.js")
+const startupVerificationRouter = require("./router/startupVerification.routes.js");
+const paymentRouter=require("./router/payment.route.js");
 
 if (process.env.NODE_ENV !== 'test') {
   connectDB();
@@ -97,6 +240,7 @@ app.use("/api", notificationRouter);
 app.use("/api", emailsRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api", review);
+app.use("/api/startup-verification", startupVerificationRouter);
 app.use("/api/payment", paymentRouter);
 // Mount recommendations router under /api/recommendations
 // so routes like '/cold-start/jobs' become '/api/recommendations/cold-start/jobs'
@@ -114,4 +258,3 @@ if (require.main === module) {
 }
 
 module.exports = { app, server, io };
-

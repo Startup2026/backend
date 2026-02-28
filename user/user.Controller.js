@@ -23,11 +23,16 @@ const createUser = async_handler(async (req, res) => {
     const normalizedEmail = email.toLowerCase();
 
     // 1. Check if user already exists in main User collection
-    const existingVerified = await User.findOne({ email: normalizedEmail });
+    console.log(`[DEBUG] Checking for existing user with email: ${normalizedEmail}`);
+    const existingVerified = await User.findOne({ email: normalizedEmail }).lean(); // Using .lean() for a plain object
+    
+    console.log('[DEBUG] Result of User.findOne:', existingVerified);
+
     if (existingVerified) {
       console.log("Registration failed: Email already verified", normalizedEmail);
       return res.status(409).json({ success: false, error: 'Email already in use and verified' });
     }
+    console.log("No existing verified user found. Proceeding with registration.");
 
     // 2. Ensure password is a string
     if (typeof password !== 'string') {
@@ -203,8 +208,10 @@ const verifyEmail = async_handler(async (req, res) => {
 
     // Determine onboarding step
     let onboardingStep = 'completed';
-    if (newUser.role === 'startup') {
-      onboardingStep = 'profile'; // If they just verified, they definitely don't have a profile yet
+    if (newUser.role && newUser.role.toLowerCase() === "startup") {
+      onboardingStep = 'startup-verification'; // New step for startup verification
+    } else if (newUser.role === 'student') {
+      onboardingStep = 'profile';
     }
 
     return res.json({ 
