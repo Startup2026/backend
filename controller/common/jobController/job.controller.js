@@ -4,6 +4,19 @@ const Application = require("../../../models/application.model");
 const asyncHandler = require("express-async-handler");
 const { createAndSendNotification } = require("../../../utils/notificationHelper");
 
+const parseDeadline = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+};
+
+const isPastDeadlineDate = (deadlineDate) => {
+  const endOfDay = new Date(deadlineDate);
+  endOfDay.setHours(23, 59, 59, 999);
+  return endOfDay < new Date();
+};
+
 // CREATE JOB
 exports.createJob = asyncHandler(async (req, res) => {
   const {
@@ -26,6 +39,15 @@ exports.createJob = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: "Missing fields" });
   }
 
+  const parsedDeadline = parseDeadline(deadline);
+  if (!parsedDeadline) {
+    return res.status(400).json({ success: false, error: "Invalid deadline" });
+  }
+
+  if (isPastDeadlineDate(parsedDeadline)) {
+    return res.status(400).json({ success: false, error: "Deadline cannot be in the past" });
+  }
+
   const startup = await StartupProfile.findById(startupId);
   if (!startup) {
     return res.status(404).json({ success: false, error: "Startup not found" });
@@ -41,7 +63,7 @@ exports.createJob = asyncHandler(async (req, res) => {
     stipend: stipend === true,
     salary: stipend === true ? salary : null,
     openings,
-    deadline,
+    deadline: parsedDeadline.toISOString().split('T')[0],
     jobType,
     location,
     Tag: Array.isArray(Tag) ? Tag : []
@@ -102,6 +124,17 @@ exports.updateJob = asyncHandler(async (req, res) => {
     updates.Tag = Array.isArray(updates.Tag) ? updates.Tag : [];
   }
 
+  if ("deadline" in updates) {
+    const parsedDeadline = parseDeadline(updates.deadline);
+    if (!parsedDeadline) {
+      return res.status(400).json({ success: false, error: "Invalid deadline" });
+    }
+    if (isPastDeadlineDate(parsedDeadline)) {
+      return res.status(400).json({ success: false, error: "Deadline cannot be in the past" });
+    }
+    updates.deadline = parsedDeadline.toISOString().split('T')[0];
+  }
+
   const job = await Job.findByIdAndUpdate(req.params.id, updates, {
     new: true
   });
@@ -134,8 +167,12 @@ exports.deleteJob = asyncHandler(async (req, res) => {
       }
   }
 
-  // Optional: Clean up applications? Or keep them? Usually clean up.
-  await Application.deleteMany({ jobId });
+  // Delete applications one-by-one so Application middleware can cascade
+  // into Interview and Selection cleanup.
+  const applicationsToDelete = await Application.find({ jobId }).select('_id');
+  for (const app of applicationsToDelete) {
+    await Application.findByIdAndDelete(app._id);
+  }
   await Job.findByIdAndDelete(jobId);
 
   res.json({ success: true, message: "Job and associated applications deleted" });

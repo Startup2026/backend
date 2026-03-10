@@ -7,8 +7,8 @@ const paymentSchema = new mongoose.Schema({
         required: true
     },
     planType: {
-        type: String, // Ensure these match your planTypes in config
-        enum: ['FREE', 'GROWTH', 'PRO', 'ENTERPRISE'], 
+        type: String,
+        enum: ['FREE', 'SPRINT_3MO', 'BUILDER_6MO', 'PARTNER_12MO'],
         required: true
     },
     amount: {
@@ -35,5 +35,18 @@ const paymentSchema = new mongoose.Schema({
         default: 'created'
     }
 }, { timestamps: true });
+
+// Cascade delete revenue rows generated from this payment.
+paymentSchema.pre('findOneAndDelete', async function(next) {
+    try {
+        const docToUpdate = await this.model.findOne(this.getQuery());
+        if (docToUpdate) {
+            await mongoose.model('RevenueTransaction').deleteMany({ paymentId: docToUpdate._id });
+        }
+        next();
+    } catch (err) {
+        next(err);
+    }
+});
 
 module.exports = mongoose.model('Payment', paymentSchema);

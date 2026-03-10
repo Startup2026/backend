@@ -46,4 +46,25 @@ const jobSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Cascade delete related applications and saved jobs when a Job is deleted
+jobSchema.pre('findOneAndDelete', async function(next) {
+  try {
+    const docToUpdate = await this.model.findOne(this.getQuery());
+    if (docToUpdate) {
+      const jobId = docToUpdate._id;
+      // Delete Applications one by one to trigger Application middleware
+      const Application = mongoose.model('Application');
+      const apps = await Application.find({ jobId });
+      for (const app of apps) {
+        await Application.findByIdAndDelete(app._id);
+      }
+      
+      await mongoose.model('SaveJob').deleteMany({ jobId });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = mongoose.model("Job", jobSchema);

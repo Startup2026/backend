@@ -5,7 +5,7 @@ const token__middleware = require('../middleware/jwttoken.middleware');
 const { checkPlanAccess, checkUsageLimit } = require('../middleware/plan.middleware');
 
 // Schedule an interview for an application
-router.post('/interviews/:applicationId/schedule', token__middleware, checkUsageLimit('maxInterviewsPerMonth'), interviewController.scheduleInterview);
+router.post('/interviews/:applicationId/schedule', token__middleware, interviewController.scheduleInterview);
 
 // Get all interviews for the startup
 router.get('/interviews', token__middleware, checkPlanAccess('interviewCalendar'), interviewController.getInterviews);

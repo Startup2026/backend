@@ -16,4 +16,7 @@ router.get('/payment/:paymentId', tokenMiddleware, razorpayController.getPayment
 // Refund payment
 router.post('/refund', tokenMiddleware, razorpayController.refundPayment);
 
+// Get platform revenue summary (Admin only)
+router.get('/admin/revenue-summary', tokenMiddleware, razorpayController.getPlatformRevenueSummary);
+
 module.exports = router;

@@ -1,5 +1,5 @@
 const StartupProfile = require("../models/startupprofile.model");
-const { PLAN_FEATURES } = require("../config/planFeatures");
+const { PLAN_FEATURES, normalizePlanName } = require("../config/planFeatures");
 const asyncHandler = require("express-async-handler");
 
 exports.checkPlanAccess = (featureKey, requiredLevel = null) => {
@@ -34,18 +34,24 @@ exports.checkPlanAccess = (featureKey, requiredLevel = null) => {
       }
     }
 
-    const plan = startup.subscriptionPlan || "FREE";
-    const features = PLAN_FEATURES[plan];
+    const normalizedPlan = normalizePlanName(startup.subscriptionPlan) || "FREE";
+
+    if (normalizedPlan !== startup.subscriptionPlan) {
+      startup.subscriptionPlan = normalizedPlan;
+      await startup.save();
+    }
+
+    const features = PLAN_FEATURES[normalizedPlan];
 
     req.startupProfile = startup; // Attach for further use
-    req.plan = plan;
+    req.plan = normalizedPlan;
     req.planFeatures = features;
 
     if (featureKey && (!features || !features[featureKey])) {
       return res.status(403).json({ 
         success: false, 
-        error: `Feature '${featureKey}' not available in your current plan (${plan}).`,
-        plan: plan,
+        error: `Feature '${featureKey}' not available in your current plan (${normalizedPlan}).`,
+        plan: normalizedPlan,
         featureKey: featureKey
       });
     }
@@ -55,8 +61,8 @@ exports.checkPlanAccess = (featureKey, requiredLevel = null) => {
         if (requiredLevel === "Advanced") {
             return res.status(403).json({
                 success: false,
-                error: `Advanced access for '${featureKey}' requires a higher plan (Pro/Enterprise).`,
-                plan: plan
+                error: `Advanced access for '${featureKey}' requires a higher plan.`,
+                plan: normalizedPlan
             });
         }
     }
@@ -76,40 +82,31 @@ exports.checkUsageLimit = (limitKey) => {
       return res.status(404).json({ success: false, error: "Startup profile not found." });
     }
 
-    const plan = startup.subscriptionPlan || "FREE";
-    const limitValue = PLAN_FEATURES[plan][limitKey];
+    const plan = normalizePlanName(startup.subscriptionPlan) || "FREE";
+
+    if (plan !== startup.subscriptionPlan) {
+      startup.subscriptionPlan = plan;
+      await startup.save();
+    }
+
+    const limitValue = PLAN_FEATURES[plan] ? PLAN_FEATURES[plan][limitKey] : null;
+
+    if (limitValue === null || limitValue === undefined) {
+      return res.status(403).json({
+        success: false,
+        error: `Usage limit '${limitKey}' is not available for plan ${plan}.`,
+        plan
+      });
+    }
 
     if (limitKey === "maxActiveJobs") {
         const Job = require("../models/job.model");
         const activeJobsCount = await Job.countDocuments({ startupId: startup._id });
         if (activeJobsCount >= limitValue) {
             return res.status(403).json({ 
-                success: false, 
-                error: `Active jobs limit reached for ${plan} plan. Limit: ${limitValue}`,
-                plan: plan
-            });
-        }
-    }
-
-    if (limitKey === "maxInterviewsPerMonth") {
-        const Interview = require("../models/interview.model");
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
-
-        // We count interviews created this month for this startup
-        // Note: Startup profile _id is used to link interviews potentially
-        // Let's check interview model to see how it's linked
-        const interviewCount = await Interview.countDocuments({ 
-            startupId: startup._id,
-            createdAt: { $gte: startOfMonth }
-        });
-
-        if (interviewCount >= limitValue) {
-            return res.status(403).json({
-                success: false,
-                error: `Monthly interview limit reached for ${plan} plan. Limit: ${limitValue} / month`,
-                plan: plan
+              success: false, 
+              error: `Active jobs limit reached for ${plan} plan. Limit: ${limitValue}`,
+              plan: plan
             });
         }
     }

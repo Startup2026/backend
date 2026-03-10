@@ -92,8 +92,8 @@ const addComment = asyncHandler(async (req, res) => {
   post.comments.push({ user: userId, text });
   await post.save();
 
-  // Populate user details immediately so frontend sees name/avatar
-  const updatedPost = await Post.findById(postId).populate("comments.user", "name avatar");
+  // Populate actual user identity fields used by frontend displays.
+  const updatedPost = await Post.findById(postId).populate("comments.user", "username email");
 
   res.status(201).json({
     message: "Comment added successfully",

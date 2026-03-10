@@ -44,4 +44,28 @@ const studentProfileSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Cascade delete applications and saved jobs when a StudentProfile is deleted
+studentProfileSchema.pre('findOneAndDelete', async function(next) {
+  try {
+    const docToUpdate = await this.model.findOne(this.getQuery());
+    if (docToUpdate) {
+      const studentId = docToUpdate._id;
+      // Delete applications one-by-one so Application middleware can cascade
+      // into Interview and Selection cleanup.
+      const Application = mongoose.model('Application');
+      const applications = await Application.find({ studentId });
+      for (const app of applications) {
+        await Application.findByIdAndDelete(app._id);
+      }
+      await mongoose.model('SaveJob').deleteMany({ studentId });
+      try {
+        await mongoose.model('SavePost').deleteMany({ studentId });
+      } catch(e) {}
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = mongoose.model("StudentProfile", studentProfileSchema);

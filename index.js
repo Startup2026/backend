@@ -31,11 +31,9 @@
 // const http = require("http");
 // const { initSocket } = require("./config/socket");
 // const review=require("./router/review.routes.js")
-// <<<<<<< HEAD
 // const startupVerificationRouter = require("./router/startupVerification.routes.js")
-// =======
 // const paymentRouter=require("./router/payment.route.js")
-// >>>>>>> d92941db4d675baec1d01810a6f588b16519549e
+
 
 // if (process.env.NODE_ENV !== 'test') {
 //   connectDB();
@@ -101,11 +99,9 @@
 // app.use("/api", emailsRouter);
 // app.use("/api/analytics", analyticsRouter);
 // app.use("/api", review);
-// <<<<<<< HEAD
 // app.use("/api/startup-verification", startupVerificationRouter);
-// =======
 // app.use("/api/payment", paymentRouter);
-// >>>>>>> d92941db4d675baec1d01810a6f588b16519549e
+
 // // Mount recommendations router under /api/recommendations
 // // so routes like '/cold-start/jobs' become '/api/recommendations/cold-start/jobs'
 // app.use("/api/recommendations", recommendationRouter)
@@ -175,6 +171,9 @@ const { initSocket } = require("./config/socket");
 const review=require("./router/review.routes.js")
 const startupVerificationRouter = require("./router/startupVerification.routes.js");
 const paymentRouter=require("./router/payment.route.js");
+const incubatorRouter = require("./router/incubator.routes.js");
+const feedRouter = require("./router/feed.routes.js");
+const { getAdminConfig } = require("./admin/admin.js");
 
 if (process.env.NODE_ENV !== 'test') {
   connectDB();
@@ -210,6 +209,11 @@ app.get("/", (req, res) => {
   res.send("API is running...");
 }); 
 
+app.use((req, res, next) => {
+  console.log(`>>> [Request]: ${req.method} ${req.url}`);
+  next();
+});
+
 app.use(express.json({ limit: "50mb" }));
 app.use(cookieParser());
 
@@ -223,38 +227,58 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/media", express.static(path.join(__dirname, "media")));
 // Mount all routers under /api so individual route paths defined in each router file map to `/api/<route>`
 app.use("/api", userRouter);
+app.use("/api", notificationRouter);
 app.use("/api", applicationRouter);
-app.use("/api", graphicalRouter);
-app.use("/api", interviewsRouter);
-app.use("/api", jobsRouter);
-app.use("/api", jobSummaryRouter);
-app.use("/api", mainSummaryRouter);
-app.use("/api", myJobApplicationsRouter);
-app.use("/api/posts", postsRouter);
-app.use("/api", selectionsRouter);
+const { protectStartupDashboard } = require("./middleware/protectDashboard.middleware");
+const token__middleware = require("./middleware/jwttoken.middleware");
+
+app.use("/api", userRouter);
 app.use("/api", startupProfileRouter);
 app.use("/api", studentProfileRouter);
-app.use("/api", saveJobRouter);
-app.use("/api", savPostRouter);
-app.use("/api", notificationRouter);
 app.use("/api", emailsRouter);
-app.use("/api/analytics", analyticsRouter);
-app.use("/api", review);
-app.use("/api/startup-verification", startupVerificationRouter);
 app.use("/api/payment", paymentRouter);
+app.use("/api/startup-verification", startupVerificationRouter);
+app.use("/api/incubator", incubatorRouter);
+
+// Protected Dashboard Routes
+app.use("/api", token__middleware, protectStartupDashboard, graphicalRouter);
+app.use("/api", token__middleware, protectStartupDashboard, interviewsRouter);
+app.use("/api", token__middleware, protectStartupDashboard, jobsRouter);
+app.use("/api", token__middleware, protectStartupDashboard, jobSummaryRouter);
+app.use("/api", token__middleware, protectStartupDashboard, mainSummaryRouter);
+app.use("/api", token__middleware, protectStartupDashboard, myJobApplicationsRouter);
+app.use("/api/posts", token__middleware, protectStartupDashboard, postsRouter);
+app.use("/api", token__middleware, protectStartupDashboard, selectionsRouter);
+app.use("/api", token__middleware, protectStartupDashboard, saveJobRouter);
+app.use("/api", token__middleware, protectStartupDashboard, savPostRouter);
+app.use("/api/analytics", token__middleware, protectStartupDashboard, analyticsRouter);
+app.use("/api", token__middleware, protectStartupDashboard, review);
+app.use("/api/feed", token__middleware, protectStartupDashboard, feedRouter);
+
 // Mount recommendations router under /api/recommendations
 // so routes like '/cold-start/jobs' become '/api/recommendations/cold-start/jobs'
 app.use("/api/recommendations", recommendationRouter)
 
 const isProduction = process.env.NODE_ENV === "production";
 
+async function initAdmin() {
+  const { adminRouter, adminRootPath } = await getAdminConfig();
+  app.use(adminRootPath, adminRouter);
+}
 
 
 const port = process.env.PORT || 3000;
-if (require.main === module) {
-  server.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
+initAdmin()
+  .then(() => {
+    if (require.main === module) {
+      server.listen(port, () => {
+        console.log(`Server listening on port ${port}`);
+      });
+    }
+  })
+  .catch((error) => {
+    console.error("Failed to initialize AdminJS", error);
+    process.exit(1);
   });
-}
 
 module.exports = { app, server, io };

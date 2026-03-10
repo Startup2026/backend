@@ -16,8 +16,11 @@ module.exports = function (req, res, next) {
 
   const token = tokenFromHeader || tokenFromCookie;
 
+  console.log(">>> [Auth Middleware] Token found:", !!token, "Path:", req.path);
+
   // If no token at all, deny access
   if (!token) {
+    console.log(">>> [Auth Middleware] No token, access denied.");
     return res.status(401).json({ message: "Access denied. No token provided." });
   }
 

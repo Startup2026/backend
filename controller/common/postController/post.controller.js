@@ -1,10 +1,12 @@
 const Post = require('../../../models/post.model');
 const StartupModel = require('../../../models/startupprofile.model');
+const Incubator = require('../../../models/incubator.model');
+const User = require('../../../models/user.model');
 const async_handler = require("express-async-handler");
 
 /**
  * CREATE POST
- * ONLY STARTUPS CAN POST
+ * Only Startups OR Incubators can post
  */
 const createPost = async_handler(async (req, res) => {
   try {
@@ -12,22 +14,43 @@ const createPost = async_handler(async (req, res) => {
       title,
       description,
     } = req.body;
+    
+    let posterId = null;
+    let posterType = 'StartupProfile';
 
-    // Use req.user.id to find the startup profile
-    if (!req.user || req.user.role !== 'startup') {
-      return res.status(403).json({
-        success: false,
-        error: 'Only startups are allowed to create posts'
-      });
+    // 1. Identify Poster
+    if (req.user.role === 'startup') {
+        const startup = await StartupModel.findOne({ userId: req.user.id });
+        if (!startup) {
+            return res.status(404).json({ success: false, error: 'Startup profile not found' });
+        }
+        posterId = startup._id;
+        posterType = 'StartupProfile';
+    } else if (req.user.role === 'incubator_admin') {
+        // Incubator Admin posts as the Incubator
+        // req.user.incubatorId might be present from middleware, or check DB
+        let incId = req.user.incubatorId;
+        if (!incId) {
+            // Fallback lookup
+            const u = await User.findById(req.user.id);
+            incId = u.incubatorId;
+        } 
+        
+        if (!incId) {
+             return res.status(403).json({ success: false, error: "No associated incubator found for this admin." });
+        }
+        
+        posterId = incId;
+        posterType = 'Incubator';
+    } else {
+        return res.status(403).json({ success: false, error: 'Only startups and incubators can post.' });
     }
 
-    const startup = await StartupModel.findOne({ userId: req.user.id });
-    if (!startup) {
-      return res.status(404).json({
-        success: false,
-        error: 'Startup profile not found for this user'
-      });
-    }
+    // 2. Handle Media Files from Multer
+    // If using S3 or Disk, fileuploads middleware attaches req.files
+    let videoUrl = "";
+    let photoUrl = "";
+
 
     const media = {};
     if (req.files) {
@@ -39,12 +62,24 @@ const createPost = async_handler(async (req, res) => {
       }
     }
 
-    const post = new Post({
-      startupid: startup._id,
+    const postData = {
       title,
       description,
-      media
-    });
+      media,
+      // Dynamic assignment based on type
+    };
+
+    if (posterType === 'Incubator') {
+        postData.incubatorId = posterId;
+        postData.posterModel = 'Incubator';
+        // Post schema expects 'startupid' or 'incubatorId'.
+        // If 'incubatorId' provided, 'startupid' is optional.
+    } else {
+        postData.startupid = posterId;
+        postData.posterModel = 'StartupProfile';
+    }
+
+    const post = new Post(postData);
     await post.save();
 
     return res.status(201).json({

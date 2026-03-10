@@ -108,53 +108,145 @@
 // //     getMyVerificationStatus,
 // // };
 
+const {v4:uuidv4}=require("uuid")
 
+const cin_verification = async(cin)=>{
+  if(!cin) return { cinVerified: false };
+  const CINdata = {
+    task_id: uuidv4(),
+    group_id:uuidv4(),
+    data: { cin: cin }
+  };
+  const cinurl = 'https://mca-corporate-verifications.p.rapidapi.com/v3/tasks/async/verify_with_source/ind_mca';
+  const cinoptions = {
+    method: 'POST',
+    headers: {
+      'x-rapidapi-key': process.env.rapidapi_key,
+      'x-rapidapi-host': 'mca-corporate-verifications.p.rapidapi.com',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(CINdata)
+  };
 
+  let cinVerified = false;
+  try {
+    const response = await fetch(cinurl, cinoptions);
+    const result = await response.json();
+    const requestId = result?.request_id;
+    if (requestId) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const pollUrl = `https://mca-corporate-verifications.p.rapidapi.com/v3/tasks?request_id=${requestId}`;
+      const pollOptions = {
+        method: 'GET',
+        headers: {
+          'x-rapidapi-key': process.env.rapidapi_key,
+          'x-rapidapi-host': 'mca-corporate-verifications.p.rapidapi.com'
+        }
+      };
+      const pollResponse = await fetch(pollUrl, pollOptions);
+      const pollResult = await pollResponse.json();
+      const task = Array.isArray(pollResult) ? pollResult[0] : pollResult;
+      cinVerified = (task?.status === 'completed' || task?.status === 'success') && 
+                    (task?.result?.source_output?.status === 'id_found' || task?.result?.source_output?.status === 'Active');
+    }
+  } catch (error) {
+    console.error('CIN verification error:', error);
+  }
+  return { cinVerified };
+}
 
+const gstin_verification = async(gstin)=>{
+  if(!gstin) return { gstnVerified: false };
+  const GSTNdata = {
+		task_id: uuidv4(),
+		group_id: uuidv4(),
+		data: { gstin: gstin }
+	} 
+  const gstnurl = 'https://gst-verification.p.rapidapi.com/v3/tasks/sync/verify_with_source/ind_gst_certificate';
+  const gstnoptions = {
+    method: 'POST',
+    headers: {
+      'x-rapidapi-key': process.env.rapidapi_key,
+      'x-rapidapi-host': 'gst-verification.p.rapidapi.com',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(GSTNdata)
+  };
 
+  let gstnVerified = false;
+  try {
+    const response = await fetch(gstnurl, gstnoptions);
+    const result = await response.json();
+    gstnVerified = result?.status === 'completed' && result?.result?.source_output?.gstin_status === 'Active';
+  } catch (error) {
+    console.error('GSTN verification error:', error);
+  }
+  return { gstnVerified };
+}
 
+// Logic for LLPIN and UDYAM can be added here once RapidAPI endpoints are decided.
+// For now, we mark them as pending for manual review or placeholder success.
+const llpin_verification = async(llpin) => {
+  return { llpinVerified: false }; // Placeholder
+}
 
+const udyam_verification = async(udyam) => {
+  return { udyamVerified: false }; // Placeholder
+}
 
-
+const gstin_cin_verification = async(cin, gstin) => {
+  const { cinVerified } = await cin_verification(cin);
+  const { gstnVerified } = await gstin_verification(gstin);
+  return { cinVerified, gstnVerified };
+}
 
 const StartupVerification = require('../models/startupVerification.model');
 const User = require('../models/user.model');
 
 const submitVerification = async (req, res) => {
+  console.log(">>> [Verification Route Hit] User:", req.user?.id);
   try {
     const userId = req.user.id;
+    const { cin, gstNumber, llpin, udyamNumber, startupIndiaId } = req.body;
     
-    // Check if already submitted
+    // Check if identifying info exists
+    const hasAnyId = cin || gstNumber || llpin || udyamNumber || startupIndiaId;
+    
     const existing = await StartupVerification.findOne({ userId });
-    if (existing && existing.status === 'pending') {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Verification already submitted and pending review' 
-      });
-    }
-
+    
     const verificationData = {
       userId,
       ...req.body,
-      status: 'pending',
+      status: hasAnyId ? "pending" : "unverified",
       submittedAt: new Date()
     };
 
-    const verification = existing 
+    // Run active verifications if IDs provided
+    if (cin) {
+      const { cinVerified } = await cin_verification(cin);
+      verificationData.cinVerified = cinVerified;
+      if (cinVerified) verificationData.status = 'verified'; 
+    }
+    
+    if (gstNumber) {
+      const { gstnVerified } = await gstin_verification(gstNumber);
+      verificationData.gstnVerified = gstnVerified;
+      if (gstnVerified) verificationData.status = 'verified';
+    }
+
+    // Save to DB
+    const verification = existing
       ? await StartupVerification.findOneAndUpdate({ userId }, verificationData, { new: true })
       : await StartupVerification.create(verificationData);
 
-    return res.json({ 
-      success: true, 
-      message: 'Verification submitted successfully',
-      data: verification 
+    return res.json({
+      success: true,
+      message: hasAnyId ? 'Verification submitted and is pending/auto-verifying' : 'Profile info saved',
+      data: verification
     });
   } catch (error) {
     console.error('Error submitting verification:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: 'Failed to submit verification' 
-    });
+    return res.status(500).json({ success: false, error: 'Failed' });
   }
 };
 
@@ -248,4 +340,7 @@ module.exports = {
   getVerifications,
   updateVerificationStatus,
   getMyVerificationStatus,
+  cin_verification,
+  gstin_verification,
+  gstin_cin_verification,
 };

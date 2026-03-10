@@ -227,9 +227,23 @@ const createStartups = async () => {
 const clearDatabase = async () => {
   console.log('\n🗑️  Clearing existing data...');
   try {
-    await User.deleteMany({});
-    await StudentProfile.deleteMany({});
-    await StartupProfile.deleteMany({});
+    // Delete users one-by-one so User middleware cascades into profile cleanup.
+    const users = await User.find({}).select('_id');
+    for (const user of users) {
+      await User.findByIdAndDelete(user._id);
+    }
+
+    // Defensive cleanup for any orphaned profiles left from older inconsistent data.
+    const students = await StudentProfile.find({}).select('_id');
+    for (const student of students) {
+      await StudentProfile.findByIdAndDelete(student._id);
+    }
+
+    const startups = await StartupProfile.find({}).select('_id');
+    for (const startup of startups) {
+      await StartupProfile.findByIdAndDelete(startup._id);
+    }
+
     console.log('✓ Database cleared');
   } catch (error) {
     console.error('✗ Error clearing database:', error.message);

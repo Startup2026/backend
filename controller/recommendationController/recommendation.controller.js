@@ -4,6 +4,90 @@
  */
 
 const recommendationSystem = require('../../recommendation/recommendationSystem');
+const PostView = require('../../models/postView.model');
+const PostAnalytics = require('../../models/postAnalytics.model');
+
+const getClientIp = (req) => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  const forwardedIp = Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : (forwardedFor || '').split(',')[0];
+
+  const ip = (forwardedIp || req.ip || req.connection?.remoteAddress || '').toString().trim();
+  return ip.replace(/^::ffff:/, '');
+};
+
+const extractPostId = (item) => item?._id || item?.postId || item?.contentId;
+
+const trackUniquePostViewsByIp = async (recommendations, req) => {
+  const viewerIp = getClientIp(req);
+  if (!viewerIp || !Array.isArray(recommendations) || recommendations.length === 0) {
+    return;
+  }
+
+  for (const recommendation of recommendations) {
+    const postId = extractPostId(recommendation);
+    if (!postId) continue;
+
+    const existingView = await PostView.findOne({ post: postId, viewerIp });
+    if (existingView) continue;
+
+    await PostView.create({ post: postId, viewerIp });
+
+    const analytics = await PostAnalytics.findOneAndUpdate(
+      { post: postId },
+      { $inc: { views_count: 1, unique_views_count: 1 } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    analytics.calculateEngagement();
+    await analytics.save();
+  }
+};
+
+const prioritizeUnviewedPosts = async (recommendations, req) => {
+  if (!Array.isArray(recommendations) || recommendations.length === 0) {
+    return recommendations;
+  }
+
+  const viewerIp = getClientIp(req);
+  if (!viewerIp) {
+    return recommendations;
+  }
+
+  const postIds = recommendations
+    .map((item) => extractPostId(item))
+    .filter(Boolean);
+
+  if (postIds.length === 0) {
+    return recommendations;
+  }
+
+  const viewedDocs = await PostView.find({
+    viewerIp,
+    post: { $in: postIds }
+  }).select('post').lean();
+
+  const viewedSet = new Set(viewedDocs.map((doc) => doc.post.toString()));
+  const unseen = [];
+  const seen = [];
+
+  for (const item of recommendations) {
+    const postId = extractPostId(item);
+    if (!postId) {
+      unseen.push(item);
+      continue;
+    }
+
+    if (viewedSet.has(postId.toString())) {
+      seen.push(item);
+    } else {
+      unseen.push(item);
+    }
+  }
+
+  return [...unseen, ...seen];
+};
 
 /**
  * Shuffle array using Fisher-Yates algorithm
@@ -118,9 +202,19 @@ class RecommendationController {
 
       let recommendations = await recommendationSystem.getPostRecommendations(
         studentId,
-        page,
-        limit
+        1,
+        Math.max(limit * 10, 100)
       );
+
+      // Keep unseen posts at the top for this viewer.
+      recommendations = await prioritizeUnviewedPosts(recommendations, req);
+
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      recommendations = recommendations.slice(startIndex, endIndex);
+
+      // Scroll-based feed view tracking: record one unique view per post per viewer IP.
+      await trackUniquePostViewsByIp(recommendations, req);
 
       // Apply randomization if requested
       if (randomize && recommendations.length > 0) {
@@ -167,6 +261,8 @@ class RecommendationController {
         recommendationSystem.getJobRecommendations(studentId, jobLimit),
         recommendationSystem.getPostRecommendations(studentId, postLimit)
       ]);
+
+      await trackUniquePostViewsByIp(postRecommendations, req);
 
       // Apply randomization if requested
       let jobs = randomize ? shuffleArray(jobRecommendations) : jobRecommendations;
@@ -270,15 +366,23 @@ class RecommendationController {
         });
       }
 
-      const recommendations = await recommendationSystem.getColdStartPostRecommendations(page, limit);
+      const recommendations = await recommendationSystem.getColdStartPostRecommendations(1, Math.max(limit * 10, 100));
+
+      const prioritizedRecommendations = await prioritizeUnviewedPosts(recommendations, req);
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const pagedRecommendations = prioritizedRecommendations.slice(startIndex, endIndex);
+
+      // Scroll-based feed view tracking: record one unique view per post per viewer IP.
+      await trackUniquePostViewsByIp(pagedRecommendations, req);
 
       res.status(200).json({
         success: true,
-        data: recommendations,
-        count: recommendations.length,
+        data: pagedRecommendations,
+        count: pagedRecommendations.length,
         type: 'posts',
         coldStartMethod: 'random',
-        message: `Found ${recommendations.length} random post recommendations for new users`
+        message: `Found ${pagedRecommendations.length} random post recommendations for new users`
       });
     } catch (error) {
       console.error('Cold start post recommendations error:', error);
@@ -321,6 +425,23 @@ class RecommendationController {
         page,
         limit
       );
+
+      if (contentType === 'posts') {
+        const prioritizedRecommendations = await prioritizeUnviewedPosts(recommendations, req);
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const pagedRecommendations = prioritizedRecommendations.slice(startIndex, endIndex);
+        await trackUniquePostViewsByIp(pagedRecommendations, req);
+
+        return res.status(200).json({
+          success: true,
+          data: pagedRecommendations,
+          count: pagedRecommendations.length,
+          type: contentType,
+          coldStartMethod: 'algorithm',
+          message: `Found ${pagedRecommendations.length} ${contentType} recommendations`
+        });
+      }
 
       res.status(200).json({
         success: true,

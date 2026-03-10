@@ -46,6 +46,19 @@ const createApplication = async_handler(async (req, res) => {
             return res.status(404).json({ success: false, error: "Job not found" });
         }
 
+        if (job.deadline) {
+            const deadlineDate = new Date(job.deadline);
+            if (Number.isNaN(deadlineDate.getTime())) {
+                return res.status(400).json({ success: false, error: "Job deadline is invalid" });
+            }
+
+            // Treat deadline as inclusive through end of day.
+            deadlineDate.setHours(23, 59, 59, 999);
+            if (deadlineDate < new Date()) {
+                return res.status(400).json({ success: false, error: "Application deadline has passed for this job" });
+            }
+        }
+
         const jobDescription = `
             Role: ${job.role}
             About Role: ${job.aboutRole}

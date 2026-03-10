@@ -66,6 +66,10 @@ const loginUser = async_handler(async (req, res) => {
         onboardingStep = 'profile';
       }
     }
+  } else if (user.role === 'incubator_admin') {
+    if (!user.incubatorId) {
+      onboardingStep = 'incubator-profile';
+    }
   } else if (user.role === 'student') {
     // Handle student onboarding if necessary
   }

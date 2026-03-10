@@ -177,16 +177,36 @@ const verifyEmail = async_handler(async (req, res) => {
       return res.status(400).json({ success: false, error: 'Verification code has expired. Please request a new one.' });
     }
 
-    // 3. Move data to main User collection (This is where the user is finally "stored")
+    // 3. Move data to main User collection
+    // We create the user but must be careful not to double-hash the password.
+    // The User model has a pre-save hook that hashes passwords.
+    // pending.password is ALREADY hashed.
+    
+    // Step 3a: Create user with a dummy password first (or let it hash the hash locally if we can't bypass)
+    // Actually, the cleanest way to BYPASS the pre-save hook for password is to direct update after creation
+    // OR create using Mongoose model but set password manually via updateOne
+    
+    // We'll create the instance, but save it with the existing hash treated as a "new" password by the hook
+    // IF we just save, it gets hashed again.
+    
+    // Workaround: Create via findOneAndUpdate with upsert (bypass hooks) or direct create and update
+    
+    // Let's go with: Create with dummy -> Overwrite with correct hash using updateOne
     const newUser = new User({
       username: pending.username,
       email: pending.email,
-      password: pending.password,
+      password: "temp_password_placeholder", // Will be hashed (wasted cycle but safe)
       role: pending.role,
-      isVerified: true // They are verified now
+      isVerified: true 
     });
 
     await newUser.save();
+
+    // NOW, overwrite the password with the correct hash (bypassing the pre-save hook)
+    await User.updateOne(
+        { _id: newUser._id }, 
+        { $set: { password: pending.password } }
+    );
 
     // 4. Remove from PendingUser
     await PendingUser.deleteOne({ _id: pending._id });
@@ -212,6 +232,8 @@ const verifyEmail = async_handler(async (req, res) => {
       onboardingStep = 'startup-verification'; // New step for startup verification
     } else if (newUser.role === 'student') {
       onboardingStep = 'profile';
+    } else if (newUser.role === 'incubator_admin') {
+      onboardingStep = 'incubator-profile';
     }
 
     return res.json({ 

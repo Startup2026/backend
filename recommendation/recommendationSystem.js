@@ -274,7 +274,12 @@ class RecommendationSystem {
       };
     });
 
-    scoredPosts.sort((a, b) => b.scores.final - a.scores.final);
+    scoredPosts.sort((a, b) => {
+      if (b.scores.final !== a.scores.final) return b.scores.final - a.scores.final;
+      const dateDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return b._id.toString().localeCompare(a._id.toString());
+    });
     
     // Pagination
     const startIndex = (page - 1) * limit;

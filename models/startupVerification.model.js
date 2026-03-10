@@ -16,10 +16,23 @@ const startupVerificationSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  brandName: String,
+  companyType: String,
+  registeredCity: String,
+  registeredState: String,
+  cin: String,
+  llpin: String,
+  gstNumber: String,
+  udyamNumber: String,
+  startupIndiaId: String,
+  founderName: String,
+  founderLinkedIn: String,
+  founderPhone: String,
+  founderEmail: String,
   status: {
     type: String,
-    enum: ['pending', 'approved', 'rejected'],
-    default: 'pending'
+    enum: ['unverified', 'pending', 'verified', 'rejected'],
+    default: 'unverified'
   },
   // Add any other fields you need for verification, e.g., incorporation documents
 }, { timestamps: true });

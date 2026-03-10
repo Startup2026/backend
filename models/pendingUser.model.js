@@ -18,7 +18,7 @@ const pendingUserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["student", "startup", "admin"],
+    enum: ["student", "startup", "admin", "platform_admin", "incubator_admin", "startup_admin"],
     required: true
   },
   otp: {
