@@ -108,7 +108,9 @@
 // //     getMyVerificationStatus,
 // // };
 
-const {v4:uuidv4}=require("uuid")
+const { randomUUID } = require("crypto");
+
+const uuidv4 = () => randomUUID();
 
 const cin_verification = async(cin)=>{
   if(!cin) return { cinVerified: false };

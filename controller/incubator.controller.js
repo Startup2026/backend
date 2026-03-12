@@ -1,5 +1,6 @@
 const StartupProfile = require('../models/startupprofile.model');
 const Incubator = require('../models/incubator.model');
+const IncubationCode = require('../models/incubationCode.model');
 const User = require('../models/user.model'); // Added User model
 const RevenueTransaction = require('../models/revenueTransaction.model');
 const Job = require('../models/job.model');
@@ -7,6 +8,8 @@ const PostView = require('../models/postView.model');
 const PostAnalytics = require('../models/postAnalytics.model');
 const async_handler = require("express-async-handler");
 const mongoose = require("mongoose");
+const { sendEmail } = require('../utils/emailHelper');
+const { generateUniqueIncubationCode, normalizeEmail } = require('../utils/incubationCodeHelper');
 
 const resolveIncubatorId = async (req) => {
     let incubatorId = req.user.incubatorId;
@@ -16,6 +19,8 @@ const resolveIncubatorId = async (req) => {
     }
     return incubatorId;
 };
+
+const getWostupMailSender = () => process.env.verify_from_mail || process.env.notification_mail;
 
 const getClientIp = (req) => {
     const forwardedFor = req.headers['x-forwarded-for'];
@@ -149,6 +154,120 @@ const getIncubatorRevenue = async_handler(async (req, res) => {
             totalCount: totalTransactionCount,
             transactions
         } 
+    });
+});
+
+const listIncubationCodes = async_handler(async (req, res) => {
+    const incubatorId = await resolveIncubatorId(req);
+
+    if (!incubatorId) {
+        return res.status(403).json({ success: false, error: 'Access denied: No associated incubator found.' });
+    }
+
+    const invitationCodes = await IncubationCode.find({ incubatorId })
+        .populate('usedByStartupId', 'startupName')
+        .sort({ createdAt: -1 })
+        .limit(25);
+
+    res.json({ success: true, data: invitationCodes });
+});
+
+const createIncubationCode = async_handler(async (req, res) => {
+    const incubatorId = await resolveIncubatorId(req);
+
+    if (!incubatorId) {
+        return res.status(403).json({ success: false, error: 'Access denied: No associated incubator found.' });
+    }
+
+    const companyName = String(req.body.companyName || '').trim();
+    const recipientEmail = normalizeEmail(req.body.recipientEmail);
+
+    if (!companyName) {
+        return res.status(400).json({ success: false, error: 'Company name is required.' });
+    }
+
+    if (!recipientEmail) {
+        return res.status(400).json({ success: false, error: 'Recipient email is required.' });
+    }
+
+    const incubator = await Incubator.findById(incubatorId).select('name');
+    if (!incubator) {
+        return res.status(404).json({ success: false, error: 'Incubator not found.' });
+    }
+
+    const existingActiveCode = await IncubationCode.findOne({
+        incubatorId,
+        recipientEmail,
+        revokedAt: null,
+        usedAt: null,
+    }).sort({ createdAt: -1 });
+
+    if (existingActiveCode) {
+        return res.status(409).json({
+            success: false,
+            error: 'An unused incubation code already exists for this company email.',
+            data: existingActiveCode,
+        });
+    }
+
+    const senderEmail = getWostupMailSender();
+    if (!senderEmail) {
+        return res.status(500).json({ success: false, error: 'Wostup sender email is not configured.' });
+    }
+
+    const code = await generateUniqueIncubationCode();
+    const invitationCode = await IncubationCode.create({
+        incubatorId,
+        code,
+        companyName,
+        recipientEmail,
+        createdBy: req.user.id || req.user._id,
+        sentFromEmail: senderEmail,
+        sentAt: new Date(),
+    });
+
+    const subject = `Your Wostup incubation code from ${incubator.name}`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111;">
+        <h2>Wostup incubation code</h2>
+        <p>Hello ${companyName},</p>
+        <p>${incubator.name} has created an incubation code for your company on Wostup.</p>
+        <p>Please use the code below when you register your startup on Wostup:</p>
+        <p style="margin: 24px 0; font-size: 22px; letter-spacing: 2px;"><strong>${code}</strong></p>
+        <p>Enter this code on the startup create profile page. Once this code is used, your incubator affiliation will be linked automatically.</p>
+        <p>If you were not expecting this email, you can ignore it.</p>
+        <hr />
+        <p style="font-size: 12px; color: #666;">Sent by Wostup on behalf of ${incubator.name}.</p>
+      </div>
+    `;
+    const text = [
+        `Hello ${companyName},`,
+        '',
+        `${incubator.name} has created an incubation code for your company on Wostup.`,
+        `Use this code when you register your startup on Wostup: ${code}`,
+        '',
+        'Enter this code on the startup create profile page to link the incubator automatically.',
+    ].join('\n');
+
+    try {
+        await sendEmail({
+            to: recipientEmail,
+            subject,
+            html,
+            text,
+            from: senderEmail,
+            fromName: 'Wostup',
+            replyTo: senderEmail,
+        });
+    } catch (emailError) {
+        await IncubationCode.findByIdAndDelete(invitationCode._id);
+        throw emailError;
+    }
+
+    res.status(201).json({
+        success: true,
+        message: 'Incubation code created and sent successfully.',
+        data: invitationCode,
     });
 });
 
@@ -398,6 +517,8 @@ module.exports = {
     getIncubatorDashboardStats,
     getIncubatorStartups,
     getIncubatorRevenue,
+    listIncubationCodes,
+    createIncubationCode,
     verifyStartupIncubator,
     rejectStartupIncubator,
     getIncubatorFeed,

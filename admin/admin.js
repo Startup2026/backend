@@ -1,8 +1,7 @@
-const AdminJSImport = require('adminjs')
-const AdminJS = AdminJSImport.default || AdminJSImport
 const session = require('express-session')
 const Application = require('../models/application.model')
 const Incubator = require('../models/incubator.model')
+const IncubationCode = require('../models/incubationCode.model')
 const Interview = require('../models/interview.model')
 const Job = require('../models/job.model')
 const Notification = require('../models/notification.model')
@@ -26,6 +25,7 @@ const User = require('../models/user.model')
 const resources = [
   Application,
   Incubator,
+  IncubationCode,
   Interview,
   Job,
   Notification,
@@ -66,10 +66,12 @@ async function getAdminConfig() {
     return cachedAdminConfig
   }
 
-  const [{ default: AdminJSExpress }, AdminJSMongoose] = await Promise.all([
+  const [{ default: AdminJSExpress }, AdminJSMongoose, AdminJSImport] = await Promise.all([
     import('@adminjs/express'),
     import('@adminjs/mongoose'),
+    import('adminjs'),
   ])
+  const AdminJS = AdminJSImport.default || AdminJSImport
 
   const { adminEmail, adminPassword, cookiePassword } = getAdminCredentials()
 
@@ -79,11 +81,11 @@ async function getAdminConfig() {
   })
 
   const admin = new AdminJS({
-  resources: [
-    ...resources,
-  ], // your mongoose models
-  rootPath: '/admin',
-})
+    resources: [
+      ...resources,
+    ],
+    rootPath: '/admin',
+  })
 
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
     admin,

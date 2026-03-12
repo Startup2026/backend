@@ -7,6 +7,7 @@ const async_handler = require("express-async-handler");
 const { PLAN_FEATURES, normalizePlanName } = require('../config/planFeatures');
 const { calculate_eligibility_score, determine_eligibility_status } = require('../utils/eligibilityScoring');
 const { createAndSendNotification } = require('../utils/notificationHelper');
+const { markIncubationInviteUsed, resolveIncubationInvite } = require('../utils/incubationCodeHelper');
 
 const getClientIp = (req) => {
   const forwardedFor = req.headers['x-forwarded-for'];
@@ -126,9 +127,21 @@ const createProfile = async_handler(async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
+    const incubationInvite = await resolveIncubationInvite({
+      incubationCode: req.body.incubationCode,
+      userEmail: user.email,
+      founderEmail,
+    });
+
     const resolvedSocialLinks = buildSocialLinks(socialLinks, linkedinUrl, twitterUrl, githubUrl);
     const resolvedLocation = normalizeLocation(location, city, country);
-    console.log(incubatorId);
+
+    const resolvedIncubatorId = incubationInvite ? incubationInvite.incubatorId : (incubatorId || null);
+    const resolvedIncubatorName = incubationInvite ? incubationInvite.incubatorName : (incubator || undefined);
+    const resolvedIncubatorClaimed = incubationInvite ? true : (!!incubator_claimed || !!incubator || !!incubatorId);
+    const resolvedIncubatorVerified = incubationInvite ? true : false;
+    const resolvedIncubatorVerifiedAt = incubationInvite ? new Date() : undefined;
+
     const startupParams = {
       legally_registered,
       registration_type,
@@ -216,13 +229,25 @@ const createProfile = async_handler(async (req, res) => {
       eligibility_score,
       eligibility_status,
       approval_status: final_approval_status,
-      incubatorId: incubatorId || null,
-      incubator: incubator || undefined,
-      incubator_claimed: !!incubator_claimed || !!incubator || !!incubatorId
+      incubatorId: resolvedIncubatorId,
+      incubator: resolvedIncubatorName,
+      incubator_claimed: resolvedIncubatorClaimed,
+      incubator_verified: resolvedIncubatorVerified,
+      incubator_verified_at: resolvedIncubatorVerifiedAt,
+      incubationCodeId: incubationInvite ? incubationInvite.invitation._id : null,
+      incubationCodeUsedAt: incubationInvite ? new Date() : null
     });
     await profile.save();
 
-    if (profile.incubatorId) {
+    if (incubationInvite) {
+      await markIncubationInviteUsed({
+        invitation: incubationInvite.invitation,
+        startupId: profile._id,
+        userId,
+      });
+    }
+
+    if (profile.incubatorId && !profile.incubator_verified) {
       await notifyIncubatorAdminsForClaim({
         incubatorId: profile.incubatorId,
         startupName: profile.startupName,
@@ -288,9 +313,13 @@ const getProfileById = async_handler(async (req, res) => {
     let profile;
     // support 'me' shortcut
     if (req.params.id === 'me') {
-      profile = await StartupProfile.findOne({ userId: req.user.id }).populate('userId', 'name email');
+      profile = await StartupProfile.findOne({ userId: req.user.id })
+        .populate('userId', 'name email')
+        .populate('incubatorId', 'name');
     } else {
-      profile = await StartupProfile.findById(req.params.id).populate('userId', 'name email');
+      profile = await StartupProfile.findById(req.params.id)
+        .populate('userId', 'name email')
+        .populate('incubatorId', 'name');
     }
 
     if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
@@ -414,7 +443,26 @@ const updateProfile = async_handler(async (req, res) => {
 
     const previousIncubatorId = profile.incubatorId ? profile.incubatorId.toString() : null;
 
+    const authUser = await User.findById(userId).select('email');
+    const incubationInvite = await resolveIncubationInvite({
+      incubationCode: req.body.incubationCode,
+      userEmail: authUser?.email,
+      founderEmail: req.body.founderEmail,
+      currentStartupId: profile._id,
+      currentIncubatorId: previousIncubatorId,
+    });
+
     Object.assign(profile, updates);
+
+    if (incubationInvite) {
+      profile.incubatorId = incubationInvite.incubatorId;
+      profile.incubator = incubationInvite.incubatorName || profile.incubator;
+      profile.incubator_claimed = true;
+      profile.incubator_verified = true;
+      profile.incubator_verified_at = profile.incubator_verified_at || new Date();
+      profile.incubationCodeId = incubationInvite.invitation._id;
+      profile.incubationCodeUsedAt = profile.incubationCodeUsedAt || new Date();
+    }
 
     // Dynamic Re-Approval Logic on Update:
     // 1. Recalculate score
@@ -462,9 +510,17 @@ const updateProfile = async_handler(async (req, res) => {
     profile.approval_status = final_approval_status;
     await profile.save();
 
+    if (incubationInvite) {
+      await markIncubationInviteUsed({
+        invitation: incubationInvite.invitation,
+        startupId: profile._id,
+        userId,
+      });
+    }
+
     const currentIncubatorId = profile.incubatorId ? profile.incubatorId.toString() : null;
     const incubatorChanged = currentIncubatorId && currentIncubatorId !== previousIncubatorId;
-    if (incubatorChanged || (req.body.incubatorId && currentIncubatorId)) {
+    if (!profile.incubator_verified && (incubatorChanged || (req.body.incubatorId && currentIncubatorId))) {
       await notifyIncubatorAdminsForClaim({
         incubatorId: profile.incubatorId,
         startupName: profile.startupName,

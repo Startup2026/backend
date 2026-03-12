@@ -175,7 +175,9 @@ const startupSchema = new mongoose.Schema(
     incubator: { type: String, trim: true }, // Legacy/string version if manual entry
     incubator_claimed: { type: Boolean, default: false },
     incubator_verified: { type: Boolean, default: false },
-    incubator_verified_at: { type: Date }
+    incubator_verified_at: { type: Date },
+    incubationCodeId: { type: mongoose.Schema.Types.ObjectId, ref: 'IncubationCode', default: null },
+    incubationCodeUsedAt: { type: Date }
   },
   {
     timestamps: true

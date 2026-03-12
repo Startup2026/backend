@@ -266,19 +266,26 @@ async function initAdmin() {
   app.use(adminRootPath, adminRouter);
 }
 
+function startServer() {
+  if (require.main === module) {
+    server.listen(port, () => {
+      console.log(`Server listening on port ${port}`);
+    });
+  }
+}
 
 const port = process.env.PORT || 3000;
-initAdmin()
-  .then(() => {
-    if (require.main === module) {
-      server.listen(port, () => {
-        console.log(`Server listening on port ${port}`);
-      });
-    }
-  })
-  .catch((error) => {
-    console.error("Failed to initialize AdminJS", error);
-    process.exit(1);
-  });
+if (process.env.NODE_ENV === 'test') {
+  startServer();
+} else {
+  initAdmin()
+    .then(() => {
+      startServer();
+    })
+    .catch((error) => {
+      console.error("Failed to initialize AdminJS", error);
+      process.exit(1);
+    });
+}
 
 module.exports = { app, server, io };
