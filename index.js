@@ -184,7 +184,7 @@ const app = express();
 const server = http.createServer(app);
 
 // Allow requests from your React frontend with credentials (cookies)
-const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:5173','https://wostup.netlify.app','https://wostup.tech'];
+const allowedOrigins = (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.split(',')) || ['http://localhost:5173','https://wostup.netlify.app','https://wostup.tech',"https://wostup.com"];
 const io = initSocket(server, allowedOrigins);
 
 app.use(cors({
