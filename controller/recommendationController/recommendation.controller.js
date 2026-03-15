@@ -156,12 +156,15 @@ class RecommendationController {
    */
   async getTrendingJobs(req, res) {
     try {
-      const { studentId } = req.params; // studentId is optional for trending
+      const { studentId } = req.params; // legacy path param, optional
+      const userIdFromQuery = req.query.userId;
       const limit = parseInt(req.query.limit) || 10;
       const page = parseInt(req.query.page) || 1;
 
+      const resolvedUserId = userIdFromQuery || studentId;
+
       const recommendations = await recommendationSystem.getTrendingJobs(
-        studentId === 'guest' ? null : studentId,
+        resolvedUserId === 'guest' ? null : resolvedUserId,
         page,
         limit
       );

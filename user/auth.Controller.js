@@ -5,6 +5,54 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const { sendEmail } = require('../utils/emailHelper');
 
+const adminLoginWithEnv = async_handler(async (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: 'Username and password required' });
+  }
+
+  const configuredUsername = (process.env.ADMIN_USERNAME || process.env.username || 'admin').trim();
+  const configuredPassword = (process.env.ADMIN_PASSWORD || process.env.password || '').trim();
+  const configuredEmail = (process.env.ADMIN_EMAIL || 'admin@wostup.com').trim().toLowerCase();
+
+  if (!configuredPassword) {
+    return res.status(500).json({ success: false, error: 'Admin password is not configured on server' });
+  }
+
+  const normalizedIdentifier = username.trim().toLowerCase();
+  const matchesIdentifier = (
+    normalizedIdentifier === configuredUsername.toLowerCase() ||
+    normalizedIdentifier === configuredEmail
+  );
+
+  if (!matchesIdentifier || password.trim() !== configuredPassword) {
+    return res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+
+  const token = jwt.sign({ id: 'env-admin', role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '30d' });
+  res.cookie('auth', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      user: {
+        _id: 'env-admin',
+        username: configuredUsername,
+        email: configuredEmail,
+        role: 'admin',
+      },
+      token,
+      onboardingStep: 'completed',
+    },
+  });
+});
+
 const loginUser = async_handler(async (req, res) => {
   const { email, password } = req.body;
   console.log('[LOGIN DEBUG] Login attempt for email:', email);
@@ -203,6 +251,7 @@ const resetPassword = async_handler(async (req, res) => {
 
 module.exports = {
   loginUser,
+  adminLoginWithEnv,
   logout,
   forgotPassword,
   resetPassword

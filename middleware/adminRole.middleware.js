@@ -3,11 +3,21 @@ const async_handler = require("express-async-handler");
 const User = require('../models/user.model');
 
 const isPlatformAdmin = async_handler(async (req, res, next) => {
-    if (req.user && (req.user.role === 'platform_admin' || req.user.role === 'admin')) {
-        next();
-    } else {
-        return res.status(403).json({ success: false, error: 'Access denied: Platform Admin privileges required.' });
+    const roleFromToken = req.user?.role;
+    if (['platform_admin', 'admin'].includes(roleFromToken)) {
+        return next();
     }
+
+    // Fallback for stale tokens: validate role from DB.
+    if (req.user?.id) {
+        const user = await User.findById(req.user.id).select('role');
+        if (user && ['platform_admin', 'admin'].includes(user.role)) {
+            req.user.role = user.role;
+            return next();
+        }
+    }
+
+    return res.status(403).json({ success: false, error: 'Access denied: Platform Admin privileges required.' });
 });
 
 const isIncubatorAdmin = async_handler(async (req, res, next) => {

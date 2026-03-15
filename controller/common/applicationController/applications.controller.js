@@ -6,10 +6,9 @@ const Notification = require("../../../models/notification.model");
 const mongoose = require("mongoose");
 const axios = require('axios');
 const FormData = require('form-data');
-const fs = require('fs');
-const path = require('path');
 const { createAndSendNotification } = require("../../../utils/notificationHelper");
 const { sendEmail } = require("../../../utils/emailHelper");
+const { getUploadedFileUrl } = require("../../../utils/uploadUrl");
 
 const createApplication = async_handler(async (req, res) => {
     const { jobId, studentId } = req.params; // studentId here is likely userId from frontend
@@ -70,9 +69,12 @@ const createApplication = async_handler(async (req, res) => {
         // 2. Process Resume and Call ATS Service
         if (resumeFile) {
             try {
-                // Prepare form data with file stream from disk
+                // Prepare form data with in-memory file buffer from multer.
                 const form = new FormData();
-                form.append('resume', fs.createReadStream(resumeFile.path));
+                form.append('resume', resumeFile.buffer, {
+                    filename: resumeFile.originalname || 'resume-file',
+                    contentType: resumeFile.mimetype,
+                });
                 form.append('job_description', jobDescription);
 
                 // Call Flask API
@@ -112,7 +114,7 @@ const createApplication = async_handler(async (req, res) => {
 
     // 3. Save Application
     // Construct resume URL (relative path for serving)
-    let finalResumeUrl = resumeFile ? `/media/${resumeFile.filename}` : null;
+    let finalResumeUrl = getUploadedFileUrl(resumeFile);
     
     // If no new resume uploaded, use the one from student profile
     if (!finalResumeUrl && studentProfile && studentProfile.resumeUrl) {

@@ -29,9 +29,27 @@ const startupVerificationSchema = new mongoose.Schema({
   founderLinkedIn: String,
   founderPhone: String,
   founderEmail: String,
+  cinVerified: {
+    type: Boolean,
+    default: false,
+  },
+  gstnVerified: {
+    type: Boolean,
+    default: false,
+  },
+  llpinVerified: {
+    type: Boolean,
+    default: false,
+  },
+  verificationType: {
+    type: String,
+    enum: ['cin', 'llpin', 'gstn'],
+    default: 'gstn'
+  },
+  rejectionReason: String,
   status: {
     type: String,
-    enum: ['unverified', 'pending', 'verified', 'rejected'],
+    enum: ['unverified', 'pending', 'verified', 'approved', 'rejected'],
     default: 'unverified'
   },
   // Add any other fields you need for verification, e.g., incorporation documents

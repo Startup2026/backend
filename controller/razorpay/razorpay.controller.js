@@ -32,6 +32,14 @@ const createOrder = async_handler(async (req, res) => {
     const planDetails = PLAN_FEATURES[normalizedPlanType];
     const amount = planDetails.amount;
 
+    if (planDetails.paymentTemporarilyDisabled) {
+        return res.status(409).json({
+            success: false,
+            code: 'PLAN_PAYMENT_TEMP_DISABLED',
+            message: `${planDetails.displayName || normalizedPlanType} is currently available without payment. Please activate it directly from plan selection.`,
+        });
+    }
+
     if (amount === 0) {
         // Free plan logic might not need payment gateway, handle accordingly
         // For now, return error or handle free upgrade directly
@@ -73,8 +81,12 @@ const verifyPayment = async_handler(async (req, res) => {
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
-    // Use environment variable secret key
-    const secret = process.env.test_secret_key || process.env.RAZORPAY_SECRET;
+    // Prefer standard Razorpay env vars while keeping backward-compatible fallbacks.
+    const secret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_SECRET || process.env.test_secret_key;
+
+    if (!secret) {
+        return res.status(500).json({ message: "Payment gateway secret key is not configured" });
+    }
 
     const expectedSignature = crypto
         .createHmac("sha256", secret)
@@ -83,7 +95,7 @@ const verifyPayment = async_handler(async (req, res) => {
 
     const isAuthentic = expectedSignature === razorpay_signature;
 
-    if (isAuthentic) {
+    if (isAuthentic) { 
         console.log(`>>> [Payment Verification] Signature match for Order: ${razorpay_order_id}`);
         // 1. Find the payment record
         const payment = await Payment.findOne({ razorpayOrderId: razorpay_order_id });
@@ -227,8 +239,14 @@ const refundPayment = async_handler(async(req,res)=>{
 
 const getPlatformRevenueSummary = async_handler(async(req, res) => {
     try {
-        // Admin only check
-        if (!['admin', 'platform_admin'].includes(req.user.role)) {
+        // Admin only check (with DB fallback for stale JWT role)
+        let effectiveRole = req.user?.role;
+        if (!['admin', 'platform_admin'].includes(effectiveRole) && req.user?.id) {
+            const dbUser = await User.findById(req.user.id).select('role');
+            effectiveRole = dbUser?.role;
+        }
+
+        if (!['admin', 'platform_admin'].includes(effectiveRole)) {
             return res.status(403).json({ success: false, error: 'Access denied: Platform Admin privileges required.' });
         }
 

@@ -3,6 +3,7 @@ const StartupModel = require('../../../models/startupprofile.model');
 const Incubator = require('../../../models/incubator.model');
 const User = require('../../../models/user.model');
 const async_handler = require("express-async-handler");
+const { getUploadedFileUrl } = require("../../../utils/uploadUrl");
 
 /**
  * CREATE POST
@@ -55,10 +56,10 @@ const createPost = async_handler(async (req, res) => {
     const media = {};
     if (req.files) {
       if (req.files['image'] && req.files['image'][0]) {
-        media.photo = `/media/${req.files['image'][0].filename}`;
+        media.photo = getUploadedFileUrl(req.files['image'][0]);
       }
       if (req.files['video'] && req.files['video'][0]) {
-        media.video = `/media/${req.files['video'][0].filename}`;
+        media.video = getUploadedFileUrl(req.files['video'][0]);
       }
     }
 
@@ -229,10 +230,10 @@ const updatePost = async_handler(async (req, res) => {
         if (!post.media) post.media = {};
         
         if (req.files['image'] && req.files['image'][0]) {
-            post.media.photo = `/media/${req.files['image'][0].filename}`;
+        post.media.photo = getUploadedFileUrl(req.files['image'][0]);
         }
         if (req.files['video'] && req.files['video'][0]) {
-            post.media.video = `/media/${req.files['video'][0].filename}`;
+        post.media.video = getUploadedFileUrl(req.files['video'][0]);
         }
     }
     

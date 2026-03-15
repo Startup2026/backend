@@ -39,6 +39,174 @@ const normalizeLocation = (location, city, country) => {
   return undefined;
 };
 
+const resolveVerificationType = (registrationType, companyType) => {
+  const normalized = (registrationType || companyType || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[._-]/g, ' ')
+    .replace(/\s+/g, ' ');
+  if (/(private|pvt|public).*(limited|ltd)/.test(normalized) || /(limited|ltd).*(private|pvt|public)/.test(normalized)) return 'cin';
+  if (normalized.includes('llp') || normalized.includes('limited liability partnership')) return 'llpin';
+  return 'gstn';
+};
+
+const verifyLlpinFormat = (llpin) => {
+  const value = (llpin || '').trim().toUpperCase();
+  // LLPIN format is typically 3 letters + optional hyphen + 4 digits, e.g. AAA-1234.
+  return /^[A-Z]{3}-?\d{4}$/.test(value);
+};
+
+const resolveApprovalByVerificationAndEligibility = async ({ cin, gstNumber, llpin, registration_type, companyType, eligibility_status }) => {
+  const verificationType = resolveVerificationType(registration_type, companyType);
+  const cinValue = (cin || '').trim();
+  const gstValue = (gstNumber || '').trim();
+  const llpinValue = (llpin || '').trim();
+
+  let cinVerified = false;
+  let gstnVerified = false;
+  let llpinVerified = false;
+  let verified = false;
+
+  if (verificationType === 'cin') {
+    if (!cinValue) {
+      return {
+        verificationType,
+        cinVerified,
+        gstnVerified,
+        llpinVerified,
+        verified,
+        finalApprovalStatus: 'Rejected',
+        autoRejected: true,
+        rejectionReason: 'CIN is required for Private/Public Limited companies.',
+      };
+    }
+
+    try {
+      const cinResult = await cin_verification(cinValue);
+      cinVerified = !!cinResult?.cinVerified;
+
+      if (!cinVerified && cinResult?.explicitNegative) {
+        return {
+          verificationType,
+          cinVerified,
+          gstnVerified,
+          llpinVerified,
+          verified,
+          finalApprovalStatus: 'Rejected',
+          autoRejected: true,
+          rejectionReason: 'CIN verification failed. Entry denied.',
+        };
+      }
+    } catch (err) {
+      console.error('CIN verification failed:', err);
+    }
+
+    verified = cinVerified;
+  } else if (verificationType === 'llpin') {
+    if (!llpinValue) {
+      return {
+        verificationType,
+        cinVerified,
+        gstnVerified,
+        llpinVerified,
+        verified,
+        finalApprovalStatus: 'Rejected',
+        autoRejected: true,
+        rejectionReason: 'LLPIN is required for LLP companies.',
+      };
+    }
+
+    llpinVerified = verifyLlpinFormat(llpinValue);
+    verified = llpinVerified;
+  } else {
+    if (!gstValue) {
+      return {
+        verificationType,
+        cinVerified,
+        gstnVerified,
+        llpinVerified,
+        verified,
+        finalApprovalStatus: 'Rejected',
+        autoRejected: true,
+        rejectionReason: 'GSTIN is required for this registration type.',
+      };
+    }
+
+    try {
+      const gstResult = await gstin_verification(gstValue);
+      gstnVerified = !!gstResult?.gstnVerified;
+
+      if (!gstnVerified && gstResult?.explicitNegative) {
+        return {
+          verificationType,
+          cinVerified,
+          gstnVerified,
+          llpinVerified,
+          verified,
+          finalApprovalStatus: 'Rejected',
+          autoRejected: true,
+          rejectionReason: 'GSTIN verification failed. Entry denied.',
+        };
+      }
+    } catch (err) {
+      console.error('GST verification failed:', err);
+    }
+
+    verified = gstnVerified;
+  }
+
+  if (!verified) {
+    return {
+      verificationType,
+      cinVerified,
+      gstnVerified,
+      llpinVerified,
+      verified,
+      finalApprovalStatus: 'Pending',
+      autoRejected: false,
+      rejectionReason: `${verificationType.toUpperCase()} verification is pending manual review.`,
+    };
+  }
+
+  if (eligibility_status === 'Eligible Startup') {
+    return {
+      verificationType,
+      cinVerified,
+      gstnVerified,
+      llpinVerified,
+      verified,
+      finalApprovalStatus: 'Approved',
+      autoRejected: false,
+      rejectionReason: undefined,
+    };
+  }
+
+  if (eligibility_status === 'Needs Manual Review') {
+    return {
+      verificationType,
+      cinVerified,
+      gstnVerified,
+      llpinVerified,
+      verified,
+      finalApprovalStatus: 'Pending',
+      autoRejected: false,
+      rejectionReason: undefined,
+    };
+  }
+
+  return {
+    verificationType,
+    cinVerified,
+    gstnVerified,
+    llpinVerified,
+    verified,
+    finalApprovalStatus: 'Rejected',
+    autoRejected: true,
+    rejectionReason: 'Startup is verified but not eligible. Entry denied.',
+  };
+};
+
 const notifyIncubatorAdminsForClaim = async ({ incubatorId, startupName, startupProfileId }) => {
   if (!incubatorId) return;
 
@@ -164,48 +332,23 @@ const createProfile = async_handler(async (req, res) => {
     console.log("Determined Eligibility Status:", eligibility_status);
     console.log("----------------------------------");
 
-    // Dynamic Approval Logic:
-    // 1. If "Not Eligible" -> Auto Reject
-    // 2. If "Eligible Startup" AND API Verified -> Auto Approve
-    // 3. Otherwise (borderline score or not verified) -> Pending for Manual Review
-    
-    let final_approval_status = 'Pending';
-    let apiVerified = false;
-    let autoRejected = false;
-
-    if (eligibility_status === 'Not Eligible') {
-      final_approval_status = 'Rejected';
-      autoRejected = true;
-    } else {
-      // Check API verification if not rejected
-      if (cin) {
-        try {
-          const { cinVerified } = await cin_verification(cin);
-          if (cinVerified) apiVerified = true;
-        } catch (e) {
-          console.error("CIN verification failed:", e);
-        }
-      }
-      if (gstNumber && !apiVerified) {
-        try {
-          const { gstnVerified } = await gstin_verification(gstNumber);
-          if (gstnVerified) apiVerified = true;
-        } catch (e) {
-            console.error("GST verification failed:", e);
-        }
-      }
-
-      // AUTO-VERIFICATION LOGIC UPDATE:
-      // If the startup is eligible based on score (>=6), we auto-approve.
-      // API verification (CIN/GST) is preferred but we allow score-based approval if API fails/missing for MVP.
-      if (eligibility_status === 'Eligible Startup') {
-        final_approval_status = 'Approved';
-        // If they provided valid docs, great. If not, we still approve based on high score.
-        // apiVerified logic above acts as a secondary check or for future strict mode.
-      } else {
-        final_approval_status = 'Pending';
-      }
-    }
+    const {
+      verificationType,
+      cinVerified,
+      gstnVerified,
+      llpinVerified,
+      verified: apiVerified,
+      finalApprovalStatus: final_approval_status,
+      autoRejected,
+      rejectionReason,
+    } = await resolveApprovalByVerificationAndEligibility({
+      cin,
+      gstNumber,
+      llpin,
+      registration_type,
+      companyType,
+      eligibility_status,
+    });
 
     const profile = new StartupProfile({
       userId,
@@ -225,6 +368,13 @@ const createProfile = async_handler(async (req, res) => {
       location: resolvedLocation,
       hiring,
       leadershipTeam,
+      cin,
+      gstNumber,
+      llpin,
+      udyamNumber,
+      startupIndiaId,
+      founderPhone,
+      founderEmail,
       ...startupParams,
       eligibility_score,
       eligibility_status,
@@ -278,8 +428,12 @@ const createProfile = async_handler(async (req, res) => {
         founderName: req.user?.username || req.user?.name || "Startup Founder", 
         founderEmail: founderEmail || req.user?.email,
         founderPhone,
-        status: autoRejected ? 'rejected' : (apiVerified ? 'verified' : 'pending'),
-        rejectionReason: autoRejected ? 'Startup does not meet minimum eligibility criteria.' : undefined
+        status: final_approval_status === 'Approved' ? 'verified' : (autoRejected ? 'rejected' : 'pending'),
+        cinVerified,
+        gstnVerified,
+        llpinVerified,
+        verificationType,
+        rejectionReason
       };
 
       if (!existingVerification) {
@@ -289,6 +443,15 @@ const createProfile = async_handler(async (req, res) => {
       }
     } catch (verError) {
       console.error("Error auto-submitting verification:", verError);
+    }
+
+    if (autoRejected) {
+      return res.status(201).json({
+        success: true,
+        warning: rejectionReason,
+        code: 'STARTUP_VERIFICATION_FAILED',
+        data: profile,
+      });
     }
 
     return res.status(201).json({ success: true, data: profile });
@@ -381,6 +544,13 @@ const updateProfile = async_handler(async (req, res) => {
       'hiring',
       'verified',
       'leadershipTeam',
+      'cin',
+      'gstNumber',
+      'llpin',
+      'udyamNumber',
+      'startupIndiaId',
+      'founderPhone',
+      'founderEmail',
       // Eligibility Fields
       'legally_registered',
       'registration_type',
@@ -474,38 +644,27 @@ const updateProfile = async_handler(async (req, res) => {
     console.log("Determined Eligibility Status:", profile.eligibility_status);
     console.log("-------------------------------------------");
 
-    // Determine updated approval status
-    let final_approval_status = profile.approval_status;
-    let apiVerified = false;
-    let autoRejected = false;
-
-    if (profile.eligibility_status === 'Not Eligible') {
-      final_approval_status = 'Rejected';
-      autoRejected = true;
-    } else {
-      // Check API verification if not rejected
-      const cin = req.body.cin || profile.cin;
-      const gstNumber = req.body.gstNumber || profile.gstNumber;
-
-      if (cin) {
-        const { cinVerified } = await cin_verification(cin);
-        if (cinVerified) apiVerified = true;
-      }
-      if (gstNumber && !apiVerified) {
-        const { gstin_verification } = require('../controller/startupVerification.controller.js');
-        const { gstnVerified } = await gstin_verification(gstNumber);
-        if (gstnVerified) apiVerified = true;
-      }
-
-      // AUTO-VERIFICATION LOGIC UPDATE (MATCHING CREATE PROFILE):
-      // If score is high enough (Eligible Startup), we auto-approve regardless of API verification for MVP.
-      if (profile.eligibility_status === 'Eligible Startup') {
-        final_approval_status = 'Approved';
-      } else if (final_approval_status === 'Rejected' && profile.eligibility_status !== 'Not Eligible') {
-        // If it was rejected but now has better score, move to pending
-        final_approval_status = 'Pending';
-      }
-    }
+    const verificationCin = req.body.cin || profile.cin;
+    const verificationGstNumber = req.body.gstNumber || profile.gstNumber;
+    const verificationLlpin = req.body.llpin || profile.llpin;
+    const verificationRegistrationType = req.body.registration_type || profile.registration_type;
+    const verificationCompanyType = req.body.companyType || profile.companyType;
+    const {
+      verificationType,
+      cinVerified,
+      gstnVerified,
+      llpinVerified,
+      finalApprovalStatus: final_approval_status,
+      autoRejected,
+      rejectionReason,
+    } = await resolveApprovalByVerificationAndEligibility({
+      cin: verificationCin,
+      gstNumber: verificationGstNumber,
+      llpin: verificationLlpin,
+      registration_type: verificationRegistrationType,
+      companyType: verificationCompanyType,
+      eligibility_status: profile.eligibility_status,
+    });
 
     profile.approval_status = final_approval_status;
     await profile.save();
@@ -538,8 +697,12 @@ const updateProfile = async_handler(async (req, res) => {
       const verificationUpdate = {
         companyName: req.body.startupName || profile.startupName,
         website: req.body.website || profile.website,
-        status: autoRejected ? 'rejected' : ((final_approval_status === 'Approved') ? 'verified' : 'pending'),
-        rejectionReason: autoRejected ? 'Startup does not meet minimum eligibility criteria.' : undefined
+        status: final_approval_status === 'Approved' ? 'verified' : (autoRejected ? 'rejected' : 'pending'),
+        cinVerified,
+        gstnVerified,
+        llpinVerified,
+        verificationType,
+        rejectionReason
       };
 
       if (brandName) verificationUpdate.brandName = brandName;
@@ -565,6 +728,15 @@ const updateProfile = async_handler(async (req, res) => {
       }
     } catch (verError) {
       console.error("Error updating verification details:", verError);
+    }
+
+    if (autoRejected) {
+      return res.status(200).json({
+        success: true,
+        warning: rejectionReason,
+        code: 'STARTUP_VERIFICATION_FAILED',
+        data: profile,
+      });
     }
 
     return res.json({ success: true, data: profile });

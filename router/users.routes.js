@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const { createUser, getUsers, getUserById, updateUser, deleteUser, verifyEmail, resendVerification } = require('../user/user.Controller');
-const { loginUser, logout, forgotPassword, resetPassword } = require('../user/auth.Controller');
+const { loginUser, adminLoginWithEnv, logout, forgotPassword, resetPassword } = require('../user/auth.Controller');
 
 const token__middleware = require('../middleware/jwttoken.middleware');
 
@@ -10,6 +10,7 @@ const token__middleware = require('../middleware/jwttoken.middleware');
 // Auth
 router.post('/auth/signup', createUser);
 router.post('/auth/login', loginUser);
+router.post('/auth/admin-login', adminLoginWithEnv);
 router.post('/auth/logout', logout);
 router.post('/auth/forgot-password', forgotPassword);
 router.post('/auth/reset-password/:token', resetPassword);

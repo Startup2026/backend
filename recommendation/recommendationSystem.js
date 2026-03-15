@@ -8,6 +8,8 @@ const StudentProfile = require('../models/studentprofile.model');
 const Application = require('../models/application.model');
 const SavePost = require('../models/savePost.model');
 const StartupProfile = require('../models/startupprofile.model'); // Added for Startup Discovery
+const User = require('../models/user.model');
+const Incubator = require('../models/incubator.model');
 
 class RecommendationSystem {
 
@@ -67,6 +69,109 @@ class RecommendationSystem {
     return Object.values(parts).reduce((a, b) => a + b, 0);
   }
 
+  normalizeLocationTokens(location) {
+    if (!location) return [];
+    if (typeof location === 'string') {
+      return this.extractTags(location);
+    }
+    if (typeof location === 'object') {
+      return this.extractTags(`${location.city || ''} ${location.country || ''}`);
+    }
+    return [];
+  }
+
+  uniqueTokens(tokens = []) {
+    return Array.from(new Set(tokens.filter(Boolean).map((token) => this.normalizeText(token)).filter(Boolean)));
+  }
+
+  calculateNicheMatchScore(nicheTokens = [], contentTokens = [], maxScore = 30) {
+    if (!nicheTokens.length || !contentTokens.length) return { score: 0, matchedTokens: [] };
+
+    const nicheSet = new Set(this.uniqueTokens(nicheTokens));
+    const contentSet = this.uniqueTokens(contentTokens);
+    const matchedTokens = contentSet.filter((token) => nicheSet.has(token));
+
+    const ratio = matchedTokens.length / Math.max(contentSet.length, 1);
+    const score = Math.min(maxScore, Math.round(ratio * maxScore * 100) / 100);
+
+    return { score, matchedTokens };
+  }
+
+  async getUserNicheContext(userId) {
+    if (!userId) {
+      return {
+        role: 'guest',
+        nicheTokens: [],
+        locationTokens: [],
+        studentProfileId: null,
+        studentSkills: []
+      };
+    }
+
+    const [user, studentProfile, startupProfile] = await Promise.all([
+      User.findById(userId).select('role incubatorId').lean(),
+      StudentProfile.findOne({ userId }).lean(),
+      StartupProfile.findOne({ userId }).lean(),
+    ]);
+
+    if (studentProfile) {
+      const skills = Array.isArray(studentProfile.skills) ? studentProfile.skills : [];
+      const interests = Array.isArray(studentProfile.interests) ? studentProfile.interests : [];
+
+      return {
+        role: 'student',
+        nicheTokens: this.uniqueTokens([...skills, ...interests]),
+        locationTokens: this.normalizeLocationTokens(studentProfile.location),
+        studentProfileId: studentProfile._id?.toString() || null,
+        studentSkills: skills,
+      };
+    }
+
+    if (startupProfile) {
+      const startupText = [
+        startupProfile.industry,
+        startupProfile.tagline,
+        startupProfile.aboutus,
+        startupProfile.productOrService,
+        startupProfile.primary_business_model,
+      ].join(' ');
+
+      return {
+        role: 'startup',
+        nicheTokens: this.uniqueTokens(this.extractTags(startupText)),
+        locationTokens: this.normalizeLocationTokens(startupProfile.location),
+        studentProfileId: null,
+        studentSkills: [],
+      };
+    }
+
+    if (user?.incubatorId || user?.role === 'incubator_admin') {
+      const [incubator, incubatorStartups] = await Promise.all([
+        user?.incubatorId ? Incubator.findById(user.incubatorId).lean() : Promise.resolve(null),
+        user?.incubatorId ? StartupProfile.find({ incubatorId: user.incubatorId }).select('industry tagline').lean() : Promise.resolve([]),
+      ]);
+
+      const incubatorIndustryTokens = incubatorStartups.flatMap((startup) => this.extractTags(`${startup.industry || ''} ${startup.tagline || ''}`));
+      const incubatorNameTokens = incubator ? this.extractTags(`${incubator.name || ''}`) : [];
+
+      return {
+        role: 'incubator_admin',
+        nicheTokens: this.uniqueTokens([...incubatorIndustryTokens, ...incubatorNameTokens]),
+        locationTokens: [],
+        studentProfileId: null,
+        studentSkills: [],
+      };
+    }
+
+    return {
+      role: user?.role || 'guest',
+      nicheTokens: [],
+      locationTokens: [],
+      studentProfileId: null,
+      studentSkills: [],
+    };
+  }
+
   // ===================== JOB RECOMMENDATIONS =====================
   async getJobRecommendations(studentId, page = 1, limit = 10) {
     // Handling case where limit was passed as second arg in older calls
@@ -76,35 +181,40 @@ class RecommendationSystem {
         page = 1;
     }
 
-    const profile = await StudentProfile.findOne({ userId: studentId });
-    // If no profile, return cold start jobs to prevent crash
-    if (!profile) return this.getColdStartJobRecommendations(limit);
+    const userContext = await this.getUserNicheContext(studentId);
+    if (!userContext.nicheTokens.length && userContext.role === 'guest') {
+      return this.getColdStartJobRecommendations(page, limit);
+    }
 
     const jobs = await Job.find()
       .populate("startupId", "startupName industry location")
       .lean();
 
-    const applications = await Application.find({ studentId })
-      .select("jobId")
-      .lean();
-
-    const appliedJobIds = applications.map(a => a.jobId?.toString());
+    let appliedJobIds = [];
+    if (userContext.studentProfileId) {
+      const applications = await Application.find({ studentId: userContext.studentProfileId })
+        .select("jobId")
+        .lean();
+      appliedJobIds = applications.map(a => a.jobId?.toString());
+    }
 
     const scoredJobs = jobs.map(job => {
       const extractedTags = this.extractTags(
-        `${job.requirements || ""} ${job.role || ""}`
+        `${job.requirements || ""} ${job.role || ""} ${job.jobType || ""} ${job.startupId?.industry || ""} ${job.location || ""}`
       );
 
       const skillMatch = this.calculateSkillMatchScore(
-        profile.skills || [],
+        userContext.studentSkills || [],
         extractedTags
       );
+      const nicheMatch = this.calculateNicheMatchScore(userContext.nicheTokens, extractedTags, 35);
 
       const engagement = this.calculateEngagementScore(job);
       const freshness = this.calculateFreshnessScore(job.createdAt);
       const diversityPenalty = appliedJobIds.includes(job._id.toString()) ? -5 : 0;
 
       const finalScore = this.calculateFinalScore({
+        nicheMatch: nicheMatch.score,
         skillMatch: skillMatch.score,
         engagement,
         freshness,
@@ -132,12 +242,18 @@ class RecommendationSystem {
         },
         scores: {
           final: Math.round(finalScore * 100) / 100,
-          skillMatch: skillMatch.score
+          skillMatch: skillMatch.score,
+          nicheMatch: nicheMatch.score
         }
       };
     });
 
-    scoredJobs.sort((a, b) => b.scores.final - a.scores.final);
+    scoredJobs.sort((a, b) => {
+      const dateDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      if (b.scores.final !== a.scores.final) return b.scores.final - a.scores.final;
+      return b._id.toString().localeCompare(a._id.toString());
+    });
     
     // Pagination
     const startIndex = (page - 1) * limit;
@@ -158,15 +274,19 @@ class RecommendationSystem {
       .populate("startupId", "startupName industry location")
       .lean();
 
+    const userContext = await this.getUserNicheContext(studentId);
+
     let appliedJobIds = [];
-    if (studentId) {
-      const applications = await Application.find({ studentId }).select("jobId").lean();
+    if (userContext.studentProfileId) {
+      const applications = await Application.find({ studentId: userContext.studentProfileId }).select("jobId").lean();
       appliedJobIds = applications.map(a => a.jobId?.toString());
     }
 
     const trendingJobs = jobs.map(job => {
       const engagement = this.calculateEngagementScore(job); // Based on apps/likes
       const freshness = this.calculateFreshnessScore(job.createdAt);
+      const jobTags = this.extractTags(`${job.role || ''} ${job.requirements || ''} ${job.jobType || ''} ${job.location || ''} ${job.startupId?.industry || ''}`);
+      const nicheMatch = this.calculateNicheMatchScore(userContext.nicheTokens, jobTags, 20);
       
       // Urgency Score: Boost jobs with deadlines approaching in the next 7 days
       let urgency = 0;
@@ -178,7 +298,8 @@ class RecommendationSystem {
       const finalScore = this.calculateFinalScore({
         engagement: engagement * 2.5, // Heavy weight on current activity
         freshness,
-        urgency
+        urgency,
+        nicheMatch: nicheMatch.score
       });
 
       return {
@@ -189,6 +310,7 @@ class RecommendationSystem {
         stipend: job.stipend === true,
         salary: job.stipend === true ? job.salary : null,
         deadline: job.deadline,
+        createdAt: job.createdAt,
         hasApplied: appliedJobIds.includes(job._id.toString()),
         startup: {
           _id: job.startupId?._id,
@@ -199,7 +321,12 @@ class RecommendationSystem {
       };
     });
 
-    trendingJobs.sort((a, b) => b.scores.final - a.scores.final);
+    trendingJobs.sort((a, b) => {
+      const dateDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      if (b.scores.final !== a.scores.final) return b.scores.final - a.scores.final;
+      return b._id.toString().localeCompare(a._id.toString());
+    });
     
     // Pagination
     const startIndex = (page - 1) * limit;
@@ -215,9 +342,11 @@ class RecommendationSystem {
         page = 1;
     }
 
+    const userContext = await this.getUserNicheContext(studentId);
+
     // 1. Fetch IDs of posts user has saved
     let savedPostIds = new Set();
-    if (studentId) {
+    if (userContext.role === 'student' && studentId) {
       const savedDocs = await SavePost.find({ studentId }).select('jobId').lean();
       savedDocs.forEach(doc => {
         if (doc.jobId) savedPostIds.add(doc.jobId.toString());
@@ -237,9 +366,12 @@ class RecommendationSystem {
     const scoredPosts = posts.map(post => {
       const freshness = this.calculateFreshnessScore(post.createdAt);
       const engagement = this.calculateEngagementScore(post);
+      const postTags = this.extractTags(`${post.title || ''} ${post.description || ''} ${post.startupid?.industry || ''}`);
+      const nicheMatch = this.calculateNicheMatchScore(userContext.nicheTokens, postTags, 30);
       const finalScore = this.calculateFinalScore({
         freshness: freshness * 1.5,
-        engagement
+        engagement,
+        nicheMatch: nicheMatch.score
       });
 
       const likesCount = Array.isArray(post.likes) ? post.likes.length : (post.likes || 0);
@@ -250,7 +382,7 @@ class RecommendationSystem {
         isLiked = post.likes.some(id => id.toString() === studentId.toString());
       }
       
-      const isSaved = savedPostIds.has(post._id.toString());
+      const isSaved = userContext.role === 'student' ? savedPostIds.has(post._id.toString()) : false;
 
       return {
         _id: post._id,
@@ -275,9 +407,9 @@ class RecommendationSystem {
     });
 
     scoredPosts.sort((a, b) => {
-      if (b.scores.final !== a.scores.final) return b.scores.final - a.scores.final;
       const dateDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       if (dateDiff !== 0) return dateDiff;
+      if (b.scores.final !== a.scores.final) return b.scores.final - a.scores.final;
       return b._id.toString().localeCompare(a._id.toString());
     });
     
@@ -295,31 +427,25 @@ class RecommendationSystem {
         page = 1;
     }
 
-    const profile = await StudentProfile.findOne({ userId: studentId });
-    if (!profile) return this.getColdStartStartupRecommendations(page, limit);
+    const userContext = await this.getUserNicheContext(studentId);
+    if (!userContext.nicheTokens.length && userContext.role === 'guest') {
+      return this.getColdStartStartupRecommendations(page, limit);
+    }
 
     const startups = await StartupProfile.find().lean();
 
     const scoredStartups = startups.map(startup => {
-      let score = 0;
-      const normalizedIndustry = this.normalizeText(startup.industry || "");
-      const studentSkills = profile.skills || [];
-      const studentInterests = profile.interests || []; // Assuming interests array exists
-
-      // 1. Industry/Skill Match Score (Max 30)
-      // Check if startup industry matches any student skill or interest
-      const matchesSkill = studentSkills.some(skill => this.normalizeText(skill).includes(normalizedIndustry));
-      const matchesInterest = studentInterests.some(interest => this.normalizeText(interest).includes(normalizedIndustry));
-
-      if (matchesInterest) score += 30;
-      else if (matchesSkill) score += 20;
+      const startupTags = this.extractTags(`${startup.industry || ''} ${startup.tagline || ''} ${startup.aboutus || ''}`);
+      const nicheMatch = this.calculateNicheMatchScore(userContext.nicheTokens, startupTags, 30);
+      let score = nicheMatch.score;
 
       // 2. Verification Bonus (Max 20)
       if (startup.verified) score += 20;
 
       // 3. Location Match (Max 10)
-      if (profile.location && startup.location &&
-        this.normalizeText(profile.location) === this.normalizeText(startup.location)) {
+      const startupLocationTokens = this.normalizeLocationTokens(startup.location);
+      const locationMatch = userContext.locationTokens.some((token) => startupLocationTokens.includes(token));
+      if (locationMatch) {
         score += 10;
       }
 

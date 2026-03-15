@@ -181,15 +181,67 @@ const getMyPosts = async_handler(async (req, res) => {
     const analyticsMap = {};
     analyticsDocs.forEach(a => { analyticsMap[a.post.toString()] = a; });
 
+    const likeCountDocs = await PostLike.aggregate([
+        { $match: { post: { $in: postIds } } },
+        { $group: { _id: '$post', count: { $sum: 1 } } }
+    ]);
+    const saveCountDocs = await PostSave.aggregate([
+        { $match: { post: { $in: postIds } } },
+        { $group: { _id: '$post', count: { $sum: 1 } } }
+    ]);
+    const viewCountDocs = await PostView.aggregate([
+        { $match: { post: { $in: postIds } } },
+        { $group: { _id: '$post', count: { $sum: 1 } } }
+    ]);
+
+    const likeCountMap = {};
+    const saveCountMap = {};
+    const viewCountMap = {};
+
+    likeCountDocs.forEach((doc) => {
+        likeCountMap[doc._id.toString()] = doc.count;
+    });
+    saveCountDocs.forEach((doc) => {
+        saveCountMap[doc._id.toString()] = doc.count;
+    });
+    viewCountDocs.forEach((doc) => {
+        viewCountMap[doc._id.toString()] = doc.count;
+    });
+
     // Merge and Sort
     const result = posts.map(p => {
-        // Ensure every post has an analytics object structure
-        const stats = analyticsMap[p._id.toString()] || { 
+        const postId = p._id.toString();
+        const existingStats = analyticsMap[postId] || { 
             views_count: 0, unique_views_count: 0, 
             likes_count: 0, comments_count: 0, 
             saves_count: 0, shares_count: 0, 
             engagement_rate: 0 
         };
+
+        const rawLikes = Array.isArray(p.likes) ? p.likes.length : 0;
+        const rawComments = Array.isArray(p.comments) ? p.comments.length : 0;
+        const dbLikes = likeCountMap[postId] || 0;
+        const dbSaves = saveCountMap[postId] || 0;
+        const dbViews = viewCountMap[postId] || 0;
+
+        const likesCount = Math.max(existingStats.likes_count || 0, dbLikes, rawLikes);
+        const commentsCount = Math.max(existingStats.comments_count || 0, rawComments);
+        const savesCount = Math.max(existingStats.saves_count || 0, dbSaves);
+        const viewsCount = Math.max(existingStats.views_count || 0, dbViews);
+        const uniqueViewsCount = Math.max(existingStats.unique_views_count || 0, dbViews);
+        const denominator = Math.max(viewsCount, 1);
+        const engagementRate = Number((((likesCount + commentsCount + savesCount) / denominator) * 100).toFixed(2));
+
+        const stats = {
+            ...existingStats,
+            views_count: viewsCount,
+            unique_views_count: uniqueViewsCount,
+            likes_count: likesCount,
+            comments_count: commentsCount,
+            saves_count: savesCount,
+            engagement_rate: engagementRate,
+        };
+
         return { ...p, analytics: stats };
     });
 

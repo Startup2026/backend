@@ -1,13 +1,14 @@
 const async_handler = require("express-async-handler");
 const posts = require("../models/post");
 const pitch = require("../models/pitch");
+const { getUploadedFileUrl } = require("../utils/uploadUrl");
 
 const createPost = async_handler(async (req, res) => {
     const { title, description, pitchid } = req.body;
     const newpost = await new posts({
         media: {
-            video: req.files?.image ? `/media/${Date.now() + req.files.image[0].filename}` : null,
-            photo: req.files?.pitchDeck ? `media/${Date.now() + req.files.pitchDeck[0].filename}` : null,
+            video: req.files?.image?.[0] ? getUploadedFileUrl(req.files.image[0]) : null,
+            photo: req.files?.pitchDeck?.[0] ? getUploadedFileUrl(req.files.pitchDeck[0]) : null,
         },
         title, description, pitchid, createdBy: req.user?.user?.id || req.user?.user?._id
     });

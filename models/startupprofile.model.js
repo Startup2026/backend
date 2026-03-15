@@ -157,6 +157,34 @@ const startupSchema = new mongoose.Schema(
       trim: true,
       uppercase: true
     },
+    gstNumber: {
+      type: String,
+      trim: true,
+      uppercase: true
+    },
+    llpin: {
+      type: String,
+      trim: true,
+      uppercase: true
+    },
+    udyamNumber: {
+      type: String,
+      trim: true,
+      uppercase: true
+    },
+    startupIndiaId: {
+      type: String,
+      trim: true
+    },
+    founderPhone: {
+      type: String,
+      trim: true
+    },
+    founderEmail: {
+      type: String,
+      trim: true,
+      lowercase: true
+    },
 
     year_of_incorporation: { type: Number },
     team_size_range: { type: String, enum: ['1-10', '11-50', '51-200', '201-500', '500+'] },

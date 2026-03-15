@@ -2,6 +2,7 @@ const StudentProfile = require('../models/studentprofile.model');
 const User = require('../models/user.model');
 const async_handler = require("express-async-handler");
 const mongoose = require('mongoose');
+const { getUploadedFileUrl } = require("../utils/uploadUrl");
 
 const parseMaybeJson = (value, fallback) => {
   if (value === undefined || value === null || value === "") return fallback;
@@ -52,10 +53,10 @@ const createProfile = async_handler(async (req, res) => {
     let profilepic = req.body.profilepic;
     let resumeFileUrl = resumeUrl;
     if (req.files?.profilepic?.[0]) {
-      profilepic = `/media/${req.files.profilepic[0].filename}`;
+      profilepic = getUploadedFileUrl(req.files.profilepic[0]);
     }
     if (req.files?.resume?.[0]) {
-      resumeFileUrl = `/media/${req.files.resume[0].filename}`;
+      resumeFileUrl = getUploadedFileUrl(req.files.resume[0]);
     }
 
     // Basic check: ensure user exists
@@ -164,10 +165,10 @@ const updateProfile = async_handler(async (req, res) => {
     });
 
     if (req.files?.profilepic?.[0]) {
-      updates.profilepic = `/media/${req.files.profilepic[0].filename}`;
+      updates.profilepic = getUploadedFileUrl(req.files.profilepic[0]);
     }
     if (req.files?.resume?.[0]) {
-      updates.resumeUrl = `/media/${req.files.resume[0].filename}`;
+      updates.resumeUrl = getUploadedFileUrl(req.files.resume[0]);
     }
 
     if (req.params.id === 'me') {

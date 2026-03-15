@@ -173,6 +173,7 @@ const startupVerificationRouter = require("./router/startupVerification.routes.j
 const paymentRouter=require("./router/payment.route.js");
 const incubatorRouter = require("./router/incubator.routes.js");
 const feedRouter = require("./router/feed.routes.js");
+const moderationRouter = require("./router/moderation.routes.js");
 const { getAdminConfig } = require("./admin/admin.js");
 
 if (process.env.NODE_ENV !== 'test') {
@@ -224,7 +225,6 @@ app.use(cookieParser());
 // });
 
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
-app.use("/media", express.static(path.join(__dirname, "media")));
 // Mount all routers under /api so individual route paths defined in each router file map to `/api/<route>`
 app.use("/api", userRouter);
 app.use("/api", notificationRouter);
@@ -239,6 +239,7 @@ app.use("/api", emailsRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/startup-verification", startupVerificationRouter);
 app.use("/api/incubator", incubatorRouter);
+app.use("/api", moderationRouter);
 
 // Protected Dashboard Routes
 app.use("/api", token__middleware, protectStartupDashboard, graphicalRouter);

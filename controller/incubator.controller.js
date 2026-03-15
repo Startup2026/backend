@@ -74,13 +74,31 @@ const getIncubatorDashboardStats = async_handler(async (req, res) => {
     
     
     // Find startups active hiring
-    const startups = await StartupProfile.find({ incubatorId }).select('_id');
+    const startups = await StartupProfile.find({ incubatorId }).select('_id hiring');
     const startupIds = startups.map(s => s._id);
 
-    const activeJobs = await Job.distinct('startupId', {
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Active jobs = jobs whose deadline has not passed.
+    // Keep backward compatibility for any old docs that may still carry `status`.
+    const activeJobStartupIds = await Job.distinct('startupId', {
         startupId: { $in: startupIds },
-        status: 'open'
+        deadline: { $gte: todayStr },
+        $or: [
+            { status: 'open' },
+            { status: { $exists: false } }
+        ]
     });
+
+    // Also respect explicit startup-level hiring toggle from profile.
+    const hiringFlagStartupIds = startups
+        .filter((s) => s.hiring)
+        .map((s) => s._id.toString());
+
+    const uniqueActiveHiringStartupIds = new Set([
+        ...activeJobStartupIds.map((id) => id.toString()),
+        ...hiringFlagStartupIds,
+    ]);
     
     // Calculate revenues
     const currentMonth = new Date();
@@ -115,7 +133,7 @@ const getIncubatorDashboardStats = async_handler(async (req, res) => {
         totalStartups,
         verifiedStartups,
         claimedStartups,
-        activeHiringStartups: activeJobs.length,
+        activeHiringStartups: uniqueActiveHiringStartupIds.size,
         totalRevenueGenerated: Number(revenueResult[0]?.totalRevenueGenerated || 0).toFixed(2),
         totalIncubatorShare: Number(revenueResult[0]?.totalIncubatorShare || 0).toFixed(2),
         revenueThisMonth: Number(revenueThisMonthResult[0]?.monthRevenue || 0).toFixed(2)
@@ -136,7 +154,40 @@ const getIncubatorStartups = async_handler(async (req, res) => {
     const startups = await StartupProfile.find({ incubatorId })
         .select('startupName industry stage eligibility_status incubator_verified hiring verificationDetails subscriptionPlan approval_status updates');
 
-    res.json({ success: true, data: startups });
+    const startupIds = startups.map((startup) => startup._id);
+    const today = new Date();
+
+    const jobs = await Job.find({ startupId: { $in: startupIds } }).select('startupId deadline');
+    const activeJobsByStartupId = new Map();
+
+    for (const job of jobs) {
+        if (!job?.startupId || !job?.deadline) continue;
+
+        const deadlineDate = new Date(job.deadline);
+        if (Number.isNaN(deadlineDate.getTime())) continue;
+
+        // Treat a job as active until end of its deadline day.
+        deadlineDate.setHours(23, 59, 59, 999);
+        if (deadlineDate < today) continue;
+
+        const startupIdStr = job.startupId.toString();
+        const currentCount = activeJobsByStartupId.get(startupIdStr) || 0;
+        activeJobsByStartupId.set(startupIdStr, currentCount + 1);
+    }
+
+    const startupsWithHiringStatus = startups.map((startup) => {
+        const startupIdStr = startup._id.toString();
+        const activeJobsCount = activeJobsByStartupId.get(startupIdStr) || 0;
+        const activeHiring = activeJobsCount > 0 || !!startup.hiring;
+
+        return {
+            ...startup.toObject(),
+            activeJobsCount,
+            activeHiring,
+        };
+    });
+
+    res.json({ success: true, data: startupsWithHiringStatus });
 });
 
 const getIncubatorRevenue = async_handler(async (req, res) => {
@@ -395,15 +446,31 @@ const getIncubatorFeed = async_handler(async (req, res) => {
             engagement_rate: 0
         };
 
+        const fallbackLikes = Array.isArray(post.likes) ? post.likes.length : 0;
+        const fallbackComments = Array.isArray(post.comments) ? post.comments.length : 0;
+        const effectiveLikes = Math.max(stats.likes_count || 0, fallbackLikes);
+        const effectiveComments = Math.max(stats.comments_count || 0, fallbackComments);
+        const denominator = Math.max(stats.views_count || 0, 1);
+        const effectiveEngagementRate = Number((((effectiveLikes + effectiveComments + (stats.saves_count || 0)) / denominator) * 100).toFixed(2));
+
+        const effectiveStats = {
+            ...stats,
+            likes_count: effectiveLikes,
+            comments_count: effectiveComments,
+            engagement_rate: effectiveEngagementRate,
+        };
+
         return {
         _id: post._id,
         startupId: post.startupid?._id,
         startupName: post.startupid?.startupName || 'Unknown Startup',
         title: post.title || 'New Post',
         content: post.description || '',
+        media: post.media || {},
         date: post.createdAt,
+        createdAt: post.createdAt,
         type: 'post',
-        analytics: stats
+        analytics: effectiveStats
         };
     });
 
@@ -451,6 +518,60 @@ const getIncubatorPayoutDetails = async_handler(async (req, res) => {
     }
 
     res.json({ success: true, data: incubator.payoutDetails || null });
+});
+
+const getIncubatorProfile = async_handler(async (req, res) => {
+    const incubatorId = await resolveIncubatorId(req);
+
+    if (!incubatorId) {
+        return res.status(403).json({ success: false, error: 'Access denied: No associated incubator found.' });
+    }
+
+    const incubator = await Incubator.findById(incubatorId).select('name website revenue_share_percentage isActive createdAt updatedAt');
+    if (!incubator) {
+        return res.status(404).json({ success: false, error: 'Incubator not found.' });
+    }
+
+    res.json({ success: true, data: incubator });
+});
+
+const updateIncubatorProfile = async_handler(async (req, res) => {
+    const incubatorId = await resolveIncubatorId(req);
+
+    if (!incubatorId) {
+        return res.status(403).json({ success: false, error: 'Access denied: No associated incubator found.' });
+    }
+
+    const name = String(req.body.name || '').trim();
+    const website = String(req.body.website || '').trim();
+
+    if (!name) {
+        return res.status(400).json({ success: false, error: 'Incubator name is required.' });
+    }
+
+    const duplicate = await Incubator.findOne({
+        _id: { $ne: incubatorId },
+        name,
+    }).select('_id');
+
+    if (duplicate) {
+        return res.status(409).json({ success: false, error: 'Another incubator already uses this name.' });
+    }
+
+    const incubator = await Incubator.findByIdAndUpdate(
+        incubatorId,
+        {
+            name,
+            website,
+        },
+        { new: true }
+    ).select('name website revenue_share_percentage isActive createdAt updatedAt');
+
+    if (!incubator) {
+        return res.status(404).json({ success: false, error: 'Incubator not found.' });
+    }
+
+    res.json({ success: true, data: incubator });
 });
 
 const saveIncubatorPayoutDetails = async_handler(async (req, res) => {
@@ -522,6 +643,8 @@ module.exports = {
     verifyStartupIncubator,
     rejectStartupIncubator,
     getIncubatorFeed,
+    getIncubatorProfile,
+    updateIncubatorProfile,
     getIncubatorPayoutDetails,
     saveIncubatorPayoutDetails
 };

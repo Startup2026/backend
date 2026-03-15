@@ -14,6 +14,8 @@ router.use(tokenMiddleware, isIncubatorAdmin);
 
 router.get('/dashboard', incubatorController.getIncubatorDashboardStats);
 router.get('/startups', incubatorController.getIncubatorStartups);
+router.get('/profile', incubatorController.getIncubatorProfile);
+router.put('/profile', incubatorController.updateIncubatorProfile);
 router.get('/analytics', incubatorController.getIncubatorRevenue);
 router.get('/invitation-codes', incubatorController.listIncubationCodes);
 router.get('/feed', incubatorController.getIncubatorFeed);

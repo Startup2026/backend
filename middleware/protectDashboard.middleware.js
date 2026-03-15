@@ -44,6 +44,17 @@ const protectStartupDashboard = async_handler(async (req, res, next) => {
     }
 
     // 4. Check Company Verification Status
+    // Startup can proceed only when backend thresholding marks profile as Approved.
+    if (profile.approval_status !== 'Approved') {
+        return res.status(403).json({
+            success: false,
+            error: 'Startup approval pending or rejected',
+            code: 'STARTUP_NOT_APPROVED',
+            approval_status: profile.approval_status,
+            eligibility_status: profile.eligibility_status
+        });
+    }
+
     const verification = await StartupVerification.findOne({ userId });
     
     // If status is 'pending', 'unverified', or 'rejected', block dashboard
