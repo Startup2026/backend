@@ -6,27 +6,47 @@ const crypto = require('crypto');
 const { sendEmail } = require('../utils/emailHelper');
 
 const adminLoginWithEnv = async_handler(async (req, res) => {
-  const { username, password } = req.body;
+  const identifier = (req.body?.username || req.body?.email || req.body?.identifier || '').toString();
+  const password = (req.body?.password || '').toString();
 
-  if (!username || !password) {
-    return res.status(400).json({ success: false, error: 'Username and password required' });
+  if (!identifier || !password) {
+    return res.status(400).json({ success: false, error: 'Username/email and password required' });
   }
 
-  const configuredUsername = (process.env.ADMIN_USERNAME || process.env.username || 'admin').trim();
-  const configuredPassword = (process.env.ADMIN_PASSWORD || process.env.password || '').trim();
-  const configuredEmail = (process.env.ADMIN_EMAIL || 'admin@wostup.com').trim().toLowerCase();
+  const configuredUsername = (
+    process.env.ADMIN_USERNAME ||
+    process.env.ADMINJS_USERNAME ||
+    process.env.username ||
+    'admin'
+  ).trim();
+
+  const configuredPassword = (
+    process.env.ADMIN_PASSWORD ||
+    process.env.ADMINJS_PASSWORD ||
+    process.env.password ||
+    ''
+  ).toString();
+
+  const configuredEmail = (
+    process.env.ADMIN_EMAIL ||
+    process.env.ADMINJS_EMAIL ||
+    'admin@wostup.com'
+  ).trim().toLowerCase();
 
   if (!configuredPassword) {
     return res.status(500).json({ success: false, error: 'Admin password is not configured on server' });
   }
 
-  const normalizedIdentifier = username.trim().toLowerCase();
+  const normalizedIdentifier = identifier.trim().toLowerCase();
   const matchesIdentifier = (
     normalizedIdentifier === configuredUsername.toLowerCase() ||
     normalizedIdentifier === configuredEmail
   );
 
-  if (!matchesIdentifier || password.trim() !== configuredPassword) {
+  // Keep password check strict, but tolerate accidental leading/trailing spaces from UI paste.
+  const matchesPassword = password === configuredPassword || password.trim() === configuredPassword;
+
+  if (!matchesIdentifier || !matchesPassword) {
     return res.status(401).json({ success: false, error: 'Invalid credentials' });
   }
 
