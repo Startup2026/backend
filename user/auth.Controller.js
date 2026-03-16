@@ -164,7 +164,7 @@ const forgotPassword = async_handler(async (req, res) => {
     console.log(`DIAGNOSTIC: Value of FRONTEND_URL from .env is: ${process.env.FRONTEND_URL}`);
 
     // Send email
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = 'https://www.wostup.com';
     const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
     const message = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
