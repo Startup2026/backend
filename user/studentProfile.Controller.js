@@ -16,6 +16,56 @@ const parseMaybeJson = (value, fallback) => {
   return value;
 };
 
+const sanitizeExperience = (value) => {
+  const parsed = parseMaybeJson(value, []);
+  const list = Array.isArray(parsed) ? parsed : (parsed && typeof parsed === 'object' ? [parsed] : []);
+
+  const normalized = list
+    .map((item) => ({
+      title: typeof item?.title === 'string' ? item.title.trim() : item?.title,
+      company: typeof item?.company === 'string' ? item.company.trim() : item?.company,
+      duration: typeof item?.duration === 'string' ? item.duration.trim() : item?.duration,
+    }))
+    .filter((item) => {
+      const hasAnyValue = [item.title, item.company, item.duration]
+        .some((v) => typeof v === 'string' ? v.length > 0 : v !== undefined && v !== null);
+      return hasAnyValue;
+    });
+
+  const invalidEntry = normalized.find((item) => !item.title || !item.company);
+  if (invalidEntry) {
+    return { error: 'Each experience entry must include title and company' };
+  }
+
+  return normalized;
+};
+
+const sanitizeEducation = (value) => {
+  const parsed = parseMaybeJson(value, []);
+  if (!Array.isArray(parsed)) return [];
+
+  const normalized = parsed
+    .map((item) => ({
+      institution: typeof item?.institution === 'string' ? item.institution.trim() : item?.institution,
+      degree: typeof item?.degree === 'string' ? item.degree.trim() : item?.degree,
+      field: typeof item?.field === 'string' ? item.field.trim() : item?.field,
+      startYear: typeof item?.startYear === 'string' ? item.startYear.trim() : item?.startYear,
+      endYear: typeof item?.endYear === 'string' ? item.endYear.trim() : item?.endYear,
+    }))
+    .filter((item) => {
+      const hasAnyValue = [item.institution, item.degree, item.field, item.startYear, item.endYear]
+        .some((v) => typeof v === 'string' ? v.length > 0 : v !== undefined && v !== null);
+      return hasAnyValue;
+    });
+
+  const invalidEntry = normalized.find((item) => !item.institution);
+  if (invalidEntry) {
+    return { error: 'Each education entry must include institution' };
+  }
+
+  return normalized;
+};
+
 const createProfile = async_handler(async (req, res) => {
   try {
     // Prefer authenticated user id (from token); fall back to body.userId if present
@@ -45,10 +95,17 @@ const createProfile = async_handler(async (req, res) => {
       experience
     } = req.body;
 
-    const parsedEducation = parseMaybeJson(education, []);
+    const parsedEducation = sanitizeEducation(education);
+    if (parsedEducation?.error) {
+      return res.status(400).json({ success: false, error: parsedEducation.error });
+    }
+
     const parsedSkills = parseMaybeJson(skills, []);
     const parsedInterests = parseMaybeJson(interests, []);
-    const parsedExperience = parseMaybeJson(experience, []);
+    const parsedExperience = sanitizeExperience(experience);
+    if (parsedExperience?.error) {
+      return res.status(400).json({ success: false, error: parsedExperience.error });
+    }
 
     let profilepic = req.body.profilepic;
     let resumeFileUrl = resumeUrl;
@@ -111,7 +168,11 @@ const getProfileById = async_handler(async (req, res) => {
     // If caller asks for 'me', return the profile belonging to the authenticated user.
     if (req.params.id === 'me') {
       const profile = await StudentProfile.findOne({ userId: req.user.id }).populate('userId', 'name email');
-      if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
+      // For current user, return a soft "not created yet" response instead of HTTP 404
+      // so dashboard/profile pages can load without a failed-resource browser error.
+      if (!profile) {
+        return res.json({ success: true, data: null, profileExists: false, message: 'Profile not found' });
+      }
       return res.json({ success: true, data: profile });
     }
 
@@ -154,15 +215,55 @@ const updateProfile = async_handler(async (req, res) => {
     ];
 
     const jsonFields = ['education', 'skills', 'interests', 'experience'];
+    const requiredScalarFields = new Set(['firstName', 'lastName', 'email']);
     const updates = {};
+
     Object.keys(req.body || {}).forEach((k) => {
       if (!allowed.includes(k)) return;
       if (jsonFields.includes(k)) {
+        if (k === 'education') {
+          const sanitizedEducation = sanitizeEducation(req.body[k]);
+          if (sanitizedEducation?.error) {
+            updates.__educationError = sanitizedEducation.error;
+            return;
+          }
+          updates[k] = sanitizedEducation;
+          return;
+        }
+
+        if (k === 'experience') {
+          const sanitizedExperience = sanitizeExperience(req.body[k]);
+          if (sanitizedExperience?.error) {
+            updates.__experienceError = sanitizedExperience.error;
+            return;
+          }
+          updates[k] = sanitizedExperience;
+          return;
+        }
+
         updates[k] = parseMaybeJson(req.body[k], []);
       } else {
-        updates[k] = req.body[k];
+        const rawValue = req.body[k];
+        if (typeof rawValue === 'string') {
+          const trimmed = rawValue.trim();
+          if (trimmed === '' && requiredScalarFields.has(k)) {
+            return;
+          }
+          updates[k] = trimmed;
+          return;
+        }
+
+        updates[k] = rawValue;
       }
     });
+
+    if (updates.__educationError) {
+      return res.status(400).json({ success: false, error: updates.__educationError });
+    }
+
+    if (updates.__experienceError) {
+      return res.status(400).json({ success: false, error: updates.__experienceError });
+    }
 
     if (req.files?.profilepic?.[0]) {
       updates.profilepic = getUploadedFileUrl(req.files.profilepic[0]);
@@ -172,8 +273,38 @@ const updateProfile = async_handler(async (req, res) => {
     }
 
     if (req.params.id === 'me') {
-      const profile = await StudentProfile.findOneAndUpdate({ userId: req.user.id }, updates, { new: true, runValidators: true });
-      if (!profile) return res.status(404).json({ success: false, error: 'Profile not found' });
+      let existingProfile = await StudentProfile.findOne({ userId: req.user.id });
+
+      if (!existingProfile) {
+        const user = await User.findById(req.user.id).select('username email profileCompleted');
+        if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+        const usernameParts = (user.username || '').trim().split(/\s+/).filter(Boolean);
+        const firstName = updates.firstName || usernameParts[0] || 'Student';
+        const lastName = updates.lastName || usernameParts.slice(1).join(' ') || 'User';
+        const email = updates.email || user.email;
+
+        const createdProfile = await StudentProfile.create({
+          userId: req.user.id,
+          firstName,
+          lastName,
+          email,
+          ...updates,
+          education: updates.education || [],
+        });
+
+        user.profileCompleted = true;
+        await user.save({ validateBeforeSave: false });
+
+        return res.status(201).json({ success: true, data: createdProfile, profileCreated: true });
+      }
+
+      const profile = await StudentProfile.findOneAndUpdate(
+        { userId: req.user.id },
+        updates,
+        { new: true, runValidators: true }
+      );
+
       return res.json({ success: true, data: profile });
     }
 
