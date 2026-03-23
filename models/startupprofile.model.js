@@ -205,7 +205,16 @@ const startupSchema = new mongoose.Schema(
     incubator_verified: { type: Boolean, default: false },
     incubator_verified_at: { type: Date },
     incubationCodeId: { type: mongoose.Schema.Types.ObjectId, ref: 'IncubationCode', default: null },
-    incubationCodeUsedAt: { type: Date }
+    incubationCodeUsedAt: { type: Date },
+    hasRecruiterPlan: {
+      type: Boolean,
+      default: false
+    },
+    dashboardType: {
+      type: String,
+      enum: ['hiring', 'startuppage'],
+      default: 'hiring'
+    }
   },
   {
     timestamps: true
