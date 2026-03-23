@@ -350,6 +350,8 @@ const createProfile = async_handler(async (req, res) => {
       eligibility_status,
     });
 
+    const { wantsRecruiterPlan } = req.body;
+
     const profile = new StartupProfile({
       userId,
       startupName,
@@ -385,7 +387,9 @@ const createProfile = async_handler(async (req, res) => {
       incubator_verified: resolvedIncubatorVerified,
       incubator_verified_at: resolvedIncubatorVerifiedAt,
       incubationCodeId: incubationInvite ? incubationInvite.invitation._id : null,
-      incubationCodeUsedAt: incubationInvite ? new Date() : null
+      incubationCodeUsedAt: incubationInvite ? new Date() : null,
+      hasRecruiterPlan: wantsRecruiterPlan || false,
+      dashboardType: wantsRecruiterPlan ? 'startuppage' : 'hiring',
     });
     await profile.save();
 
@@ -841,6 +845,27 @@ const adminReviewProfile = async_handler(async (req, res) => {
   }
 });
 
+const toggleDashboard = async_handler(async (req, res) => {
+  try {
+    const profile = await StartupProfile.findOne({ userId: req.user.id });
+    if (!profile) {
+      return res.status(404).json({ success: false, error: 'Profile not found' });
+    }
+
+    if (!profile.hasRecruiterPlan) {
+      return res.status(403).json({ success: false, error: 'You do not have a recruiter plan.' });
+    }
+
+    profile.dashboardType = profile.dashboardType === 'hiring' ? 'startuppage' : 'hiring';
+    await profile.save();
+
+    res.json({ success: true, data: { dashboardType: profile.dashboardType } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error while toggling dashboard' });
+  }
+});
+
 module.exports = {
   createProfile,
   getProfiles,
@@ -848,5 +873,6 @@ module.exports = {
   updateProfile,
   deleteProfile,
   selectPlan,
-  adminReviewProfile
+  adminReviewProfile,
+  toggleDashboard
 };

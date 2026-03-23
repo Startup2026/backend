@@ -98,6 +98,7 @@
 // app.use("/api", notificationRouter);
 // app.use("/api", emailsRouter);
 // app.use("/api/analytics", analyticsRouter);
+// app.use("/api/startup", startupRouter);
 // app.use("/api", review);
 // app.use("/api/startup-verification", startupVerificationRouter);
 // app.use("/api/payment", paymentRouter);
@@ -119,24 +120,6 @@
 
 // module.exports = { app, server, io };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ---------------- START SERVER ----------------
 
 const express = require("express");
 const dotenv = require("dotenv");
@@ -175,12 +158,15 @@ const incubatorRouter = require("./router/incubator.routes.js");
 const feedRouter = require("./router/feed.routes.js");
 const moderationRouter = require("./router/moderation.routes.js");
 const { getAdminConfig } = require("./admin/admin.js");
+const startupRouter = require("./routes/startup.js");
+const app = express();
+
+app.use("/api/startup", startupRouter);
 
 if (process.env.NODE_ENV !== 'test') {
   connectDB();
 }
 
-const app = express();
 const server = http.createServer(app);
 
 // Allow requests from your React frontend with credentials (cookies)
